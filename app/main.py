@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+from config import DATABASE_URL, DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
 from routes import auth_routes, protected_routes
 
