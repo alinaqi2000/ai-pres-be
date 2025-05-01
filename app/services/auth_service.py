@@ -1,62 +1,64 @@
-import os
-from datetime import datetime, timedelta
-from typing import Annotated, Optional
-
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from fastapi import APIRouter, Depends
+from fastapi import status
 from sqlalchemy.orm import Session
-
-import services.user_service as user_service
-from schemas.user_schema import TokenData
+from schemas.auth_schema import LoginRequest, Token, UserCreate
 from database.init import get_db
+from models.user_model import User
+from utils.dependencies import verify_password, hash_password, create_access_token, get_current_user
 
-# Secret key and algorithm configuration from environment variables
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key_here")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-def authenticate_user(db: Session, email: str, password: str):
-    user = user_service.get_user_by_email(db, email=email)
-    if not user:
-        return False
-    if not user_service.verify_password(password, user.hashed_password):
-        return False
-    return user
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+# Register user
+@router.post("/signup", response_model=Token)
+def signup(payload: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(User).filter_by(email=payload.email).first()
+    if existing:
+        raise HTTPException(status_code=403, details = "User already exists!")
+    
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        is_active=True
     )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = TokenData(email=email)
-    except JWTError:
-        raise credentials_exception
-    user = user_service.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
+    db.add(user)
+    dommit()
+    db.refresh(user)
+
+    token = create_access_token({"sub": user.email})
+    return {"access_token": token, "token_type": "bearer"}
+
+# login user
+@router.post("/signin", response_model=Token)
+def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email=credentials.email).first()
+    if not user or not verify_password(credentials.password, user.hashed_password):
+       raise HTTPException(status_code=401, details="Invalid credentials")
+    
+    token = create_access_token({"sub": user.email})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# Get all users
+@router.get("/get_all", response_model=List[UserOut])
+def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(User).all()
+
+# Get a single user by ID
+@router.get("/{user_id}", response_model=UserOut)
+def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+       raise HTTPException(status_code=404, details="User not found!")
     return user
+
+# Delete user by ID
+@router.delete("/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+       raise HTTPException(status_code=404, details="User not found!")
+    
+    db.delete(user)
+    db.commit()
+    return      

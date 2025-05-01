@@ -11,14 +11,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Database configuration
 DB_HOST = os.getenv("MYSQL_HOST", "localhost")
 DB_USER = os.getenv("MYSQL_USER", "user")
-DB_PASSWORD = os.getenv("MYSQL_PASSWORD", "123456")
+DB_PASSWORD = os.getenv("MYSQL_PASSWORD", "1122")
 DB_NAME = os.getenv("MYSQL_DB", "ai_pres")
 DB_PORT = os.getenv("MYSQL_PORT", "3306")
 
 # JWT configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key_here")
+SECRET_KEY = os.getenv("SECRET_KEY", "KAKAROT903")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "40"))
 
 # Application configuration
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
