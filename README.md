@@ -18,7 +18,7 @@ cp app/.env.example app/.env
 
 2. Build and run containers   
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 3. Access the API

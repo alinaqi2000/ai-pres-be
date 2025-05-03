@@ -1,62 +1,63 @@
-import os
-from datetime import datetime, timedelta
-from typing import Annotated, Optional
+from sqlalchemy.orm import Session, joinedload
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
-
-import services.user_service as user_service
-from schemas.user_schema import TokenData
-from database.init import get_db
-
-# Secret key and algorithm configuration from environment variables
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key_here")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+from database.models.user_model import User
+from schemas.auth_schema import UserCreate, UserUpdate
+from utils.dependencies import hash_password
 
 
-def authenticate_user(db: Session, email: str, password: str):
-    user = user_service.get_user_by_email(db, email=email)
-    if not user:
-        return False
-    if not user_service.verify_password(password, user.hashed_password):
-        return False
+def create_user(payload: UserCreate, db: Session) -> User:
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        city=payload.city,
+        hashed_password=hash_password(payload.password),
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+def get_user_by_email(email: str, db: Session):
+    return db.query(User).filter_by(email=email).first()
 
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+def get_user_by_id(user_id: int, db: Session):
+    return (
+        db.query(User)
+        .options(joinedload(User.roles))
+        .filter(User.id == user_id)
+        .first()
     )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = TokenData(email=email)
-    except JWTError:
-        raise credentials_exception
-    user = user_service.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
+
+
+def get_all_users(db: Session):
+    return db.query(User).options(joinedload(User.roles)).all()
+
+
+def update_user(user_id: int, payload: UserUpdate, db: Session):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        return None
+
+    if payload.name:
+        user.name = payload.name
+    if payload.email:
+        user.email = payload.email
+    if payload.password:
+        user.hashed_password = hash_password(payload.password)
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+def delete_user(user_id: int, db: Session):
+    user = get_user_by_id(user_id, db)
+    if user:
+        db.delete(user)
+        db.commit()
     return user
