@@ -31,3 +31,5 @@ def read_root():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=APP_HOST, port=APP_PORT, reload=True, debug=DEBUG)
+
+    
