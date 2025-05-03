@@ -56,6 +56,17 @@ services:
     networks:
       - backend
 
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    restart: always
+    environment:
+      - UI_THEME=dark
+    ports:
+      - "8025:8025"
+    networks:
+      - backend
+
 networks:
   backend:
     driver: bridge
