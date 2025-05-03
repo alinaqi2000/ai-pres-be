@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models.role_model import Role
+from database.models.role_model import Role
 
 from schemas.role_schema import RoleCreate, RoleUpdate
 

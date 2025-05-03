@@ -9,7 +9,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Database configuration
-DB_HOST = os.getenv("MYSQL_HOST", "localhost")
+DB_HOST = os.getenv("MYSQL_HOST", "db")
 DB_USER = os.getenv("MYSQL_USER", "user")
 DB_PASSWORD = os.getenv("MYSQL_PASSWORD", "123456")
 DB_NAME = os.getenv("MYSQL_DB", "ai_pres")
@@ -27,4 +27,3 @@ APP_PORT = int(os.getenv("APP_PORT", "8000"))
 
 # Database URL
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-

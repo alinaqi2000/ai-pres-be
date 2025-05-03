@@ -5,7 +5,7 @@ import traceback
 from typing import List, Union
 
 from database.init import get_db
-from models.role_model import Role
+from database.models.role_model import Role
 from schemas.role_schema import RoleCreate, RoleUpdate, ResponseModel, RoleOut
 from utils.dependencies import get_current_user
 from services.role_service import (
@@ -16,7 +16,7 @@ from services.role_service import (
     delete_role,
 )
 
-from responses.success import success_response
+from responses.success import data_response
 from responses.error import (
     conflict_error,
     not_found_error,
@@ -36,7 +36,7 @@ def create_role_route(
 ):
     try:
         role = create_role(payload, db)
-        return success_response("Role created successfully", RoleOut.from_orm(role))
+        return data_response(RoleOut.from_orm(role))
     except IntegrityError:
         db.rollback()
         return conflict_error("Role with this name already exists")
@@ -54,7 +54,7 @@ def get_roles_route(
 ):
     try:
         roles = get_all_roles(db)
-        return roles
+        return data_response(data=roles)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to retrieve roles", str(e))
@@ -71,7 +71,7 @@ def get_role_by_id_route(
         role = get_role_by_id(role_id, db)
         if not role:
             return not_found_error(f"No role found with id {role_id}")
-        return role
+        return data_response(RoleOut.from_orm(role))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to retrieve role", str(e))
@@ -91,9 +91,7 @@ def update_role_route(
         updated_role = update_role(role_id, payload, db)
         if not updated_role:
             return not_found_error(f"No role found with id {role_id}")
-        return success_response(
-            "Role updated successfully", RoleOut.from_orm(updated_role)
-        )
+        return data_response(RoleOut.from_orm(updated_role))
     except IntegrityError:
         db.rollback()
         return conflict_error("Role with this name already exists")

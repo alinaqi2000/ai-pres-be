@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from database.init import get_db
-from models.user_model import User
+from database.models.user_model import User
 from config import ALGORITHM, SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
 
 from responses.error import (

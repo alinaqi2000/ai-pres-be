@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 
-from models.user_model import User
+from database.models.user_model import User
 from schemas.auth_schema import UserCreate, UserUpdate
 from utils.dependencies import hash_password
 
@@ -9,6 +9,7 @@ def create_user(payload: UserCreate, db: Session) -> User:
     user = User(
         name=payload.name,
         email=payload.email,
+        city=payload.city,
         hashed_password=hash_password(payload.password),
         is_active=True,
     )

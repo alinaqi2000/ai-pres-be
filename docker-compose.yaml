@@ -14,7 +14,8 @@ services:
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./app:/app
     networks:
@@ -33,6 +34,10 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
     networks:
       - backend
 

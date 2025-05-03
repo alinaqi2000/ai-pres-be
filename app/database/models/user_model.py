@@ -3,7 +3,6 @@ from database.init import Base
 from sqlalchemy import Column, Integer, String, Boolean, Table, ForeignKey
 from sqlalchemy.orm import relationship
 
-
 user_roles = Table(
     "user_roles",
     Base.metadata,
@@ -20,6 +19,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
+    city = Column(String(100), nullable=False)
 
     roles = relationship(
         "Role", secondary=user_roles, back_populates="users", lazy="joined"

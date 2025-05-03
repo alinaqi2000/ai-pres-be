@@ -4,7 +4,7 @@ import uvicorn
 
 from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
-from routes import auth_routes, protected_routes
+from routes import auth_routes, role_routes
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -22,7 +22,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_routes.router)
-app.include_router(protected_routes.router)
+app.include_router(role_routes.router)
 
 
 @app.get("/")
