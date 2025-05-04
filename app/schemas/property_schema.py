@@ -12,6 +12,7 @@ class UnitBase(BaseModel):
     has_air_conditioning: bool = False
     has_internet: bool = False
     floor_id: Optional[int] = None
+    property_id: Optional[int] = None
 
 class UnitCreate(UnitBase):
     pass
