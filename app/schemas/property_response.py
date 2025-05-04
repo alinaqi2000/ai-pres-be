@@ -1,8 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
-from .property_schema import Property, Floor, Unit
-
 
 class UserResponse(BaseModel):
     id: int
@@ -13,6 +11,35 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UnitResponse(BaseModel):
+    id: int
+    name: str
+    unit_type: str
+    area: float
+    description: Optional[str]
+    has_washroom: bool
+    has_air_conditioning: bool
+    has_internet: bool
+    floor_id: Optional[int]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+class FloorResponse(BaseModel):
+    id: int
+    number: int
+    name: Optional[str]
+    description: Optional[str]
+    area: Optional[float]
+    property_id: int
+    units: List[UnitResponse] = []
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
 
 class PropertyResponse(BaseModel):
     id: int
@@ -24,43 +51,10 @@ class PropertyResponse(BaseModel):
     owner: UserResponse
     created_at: datetime
     updated_at: Optional[datetime]
-    floors: List[Floor] = []
+    floors: List[FloorResponse] = []
 
     class Config:
         from_attributes = True
-
-
-class FloorResponse(BaseModel):
-    id: int
-    number: int
-    name: Optional[str]
-    description: Optional[str]
-    area: float
-    property_id: int
-    units: List[Unit] = []
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class UnitResponse(BaseModel):
-    id: int
-    name: str
-    unit_type: str
-    area: float
-    description: Optional[str]
-    has_washroom: bool
-    has_air_conditioning: bool
-    has_internet: bool
-    floor_id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class PropertyListResponse(BaseModel):
     total: int

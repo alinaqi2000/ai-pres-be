@@ -9,7 +9,7 @@ def build_response(
     data = None,
     error: Optional[str] = None
 ) -> Response:
-    if status_code == 204 or (not data and not message):
+    if status_code == 204:
         return Response(status_code=204)
 
     response = {}
