@@ -1,4 +1,5 @@
 from typing import Type, TypeVar, Optional, List
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 ModelType = TypeVar('ModelType')
@@ -10,8 +11,31 @@ class BaseService:
     def __init__(self, model: Type[ModelType]):
         self.model = model
 
-    def create(self, db: Session, obj_in: CreateSchemaType) -> ModelType:
-        db_obj = self.model(**obj_in.model_dump())
+    def create(self, db: Session, obj_in) -> ModelType:
+        """
+        Create a new record in the database
+        
+        Args:
+            db: Database session
+            obj_in: Either a SQLAlchemy model or a Pydantic schema
+            
+        Returns:
+            The created model instance
+        """
+        if isinstance(obj_in, BaseModel):
+            # If input is a Pydantic schema, create a new SQLAlchemy model
+            db_obj = self.model(**obj_in.model_dump())
+        else:
+            # If input is already a SQLAlchemy model, use it directly
+            db_obj = obj_in
+        
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+    def create_by_model(self, db: Session, obj_in: ModelType) -> ModelType:
+        db_obj = obj_in
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)

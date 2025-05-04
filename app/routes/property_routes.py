@@ -1,4 +1,6 @@
+from schemas.image_response import PropertyImageResponse, UnitImageResponse
 from database.models.user_model import User
+from database.models.image_model import PropertyImage, UnitImage
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +21,33 @@ router = APIRouter(prefix="/properties", tags=["Properties"])
 property_service = PropertyService()
 floor_service = FloorService()
 unit_service = UnitService()
+
+# Property Routes
+
+@router.patch("/{property_id}/publish", response_model=PropertyResponse)
+async def update_property_publish_status(
+    property_id: int,
+    is_published: bool,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Update the publish status of a property"""
+    if not isinstance(current_user, User):
+        return current_user
+    
+    try:
+        property = property_service.get_property(db, property_id)
+        if not property:
+            return not_found_error(f"No property found with id {property_id}")
+        if property.owner_id != current_user.id:
+            return forbidden_error("Not authorized to update this property")
+            
+        updated_property = property_service.update_property_publish_status(db, property_id, is_published)
+        property_response = PropertyResponse.from_orm(updated_property)
+        return data_response(property_response.model_dump(mode='json'))
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 # Property Routes
 @router.post("/", response_model=PropertyResponse)
@@ -48,13 +77,70 @@ async def get_properties(
     city: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    """Get all published properties"""
     try:
-        properties = property_service.get_properties(db, skip, limit, city)
+        properties = property_service.get_properties(db, skip, limit, city, is_published=True)
         property_responses = []
         for property in properties:
-            # Convert each property to response schema
             property_data = PropertyResponse.from_orm(property)
-            # Convert floors to response schema
+            # Get thumbnail
+            thumbnail = db.query(PropertyImage).filter(
+                PropertyImage.property_id == property.id,
+                PropertyImage.is_thumbnail == True
+            ).first()
+
+            # Get images
+            images = db.query(PropertyImage).filter(
+                PropertyImage.property_id == property.id,
+                PropertyImage.is_thumbnail == False
+            ).all()
+            if images:
+                property_data.images = [PropertyImageResponse.from_orm(image) for image in images]
+            
+            if thumbnail:
+                property_data.thumbnail = PropertyImageResponse.from_orm(thumbnail)
+            # Get floors
+            property_data.floors = [FloorResponse.from_orm(floor) for floor in property_data.floors]
+            property_responses.append(property_data)
+        return data_response([p.model_dump(mode='json') for p in property_responses])
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+@router.get("/me", response_model=PropertyListResponse)
+async def get_my_properties(
+    skip: int = 0,
+    limit: int = 100,
+    city: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get all properties owned by the current user"""
+    if not isinstance(current_user, User):
+        return current_user
+    
+    try:
+        properties = property_service.get_properties(db, skip, limit, city, owner_id=current_user.id)
+        property_responses = []
+        for property in properties:
+            property_data = PropertyResponse.from_orm(property)
+            # Get thumbnail
+            thumbnail = db.query(PropertyImage).filter(
+                PropertyImage.property_id == property.id,
+                PropertyImage.is_thumbnail == True
+            ).first()
+            if thumbnail:
+                property_data.thumbnail = PropertyImageResponse.from_orm(thumbnail)
+
+            # Get images
+            images = db.query(PropertyImage).filter(
+                PropertyImage.property_id == property.id,
+                PropertyImage.is_thumbnail == False
+            ).all()
+            if images:
+                property_data.images = [PropertyImageResponse.from_orm(image) for image in images]
+           
+            # Get floors
             property_data.floors = [FloorResponse.from_orm(floor) for floor in property_data.floors]
             property_responses.append(property_data)
         return data_response([p.model_dump(mode='json') for p in property_responses])
@@ -243,7 +329,7 @@ async def create_unit(
         if floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to create unit")
             
-        unit = unit_service.create_unit(db, floor_id, unit_in)
+        unit = unit_service.create_unit(db, floor_id, property_id, unit_in)
         unit_response = UnitResponse.from_orm(unit)
         return data_response(unit_response.model_dump(mode='json'))
     except IntegrityError:
@@ -263,8 +349,16 @@ async def get_units(
 ):
     try:
         units = unit_service.get_units(db, floor_id, skip, limit)
-        unit_responses = [UnitResponse.from_orm(unit).model_dump(mode='json') for unit in units]
-        return data_response(unit_responses)
+        unit_response = []
+
+        for unit in units:
+            unit_data = UnitResponse.from_orm(unit)
+            images = db.query(UnitImage).filter(UnitImage.unit_id == unit.id).all()
+            if images:
+                unit_data.images = [UnitImageResponse.from_orm(image) for image in images]
+            unit_response.append(unit_data)
+
+        return data_response([u.model_dump(mode='json') for u in unit_response])
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

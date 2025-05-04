@@ -25,6 +25,12 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 
+# Base URL configuration
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+
+# Upload configuration
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
+
 # Email configuration
 EMAIL_FROM = os.getenv("EMAIL_FROM", "no-reply@ai-pres.com")
 EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "AI PRES")

@@ -214,3 +214,6 @@ secrets/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Uploads
+app/uploads/

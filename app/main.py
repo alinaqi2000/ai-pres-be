@@ -1,13 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
 from datetime import datetime
 from typing import Any
+import os
+from config import UPLOAD_DIR
 
 from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
-from routes import auth_routes, role_routes, property_routes
+from routes import auth_routes, role_routes, property_routes, image_routes
 
 def custom_json_encoder(obj: Any) -> Any:
     if isinstance(obj, datetime):
@@ -18,6 +21,13 @@ def custom_json_encoder(obj: Any) -> Any:
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Pres API")
+
+# Create uploads directory if it doesn't exist
+uploads_dir = os.path.join(os.getcwd(), UPLOAD_DIR)
+os.makedirs(uploads_dir, exist_ok=True)
+
+# Mount static files
+app.mount(f"/{UPLOAD_DIR}", StaticFiles(directory=uploads_dir), name=UPLOAD_DIR)
 
 # Configure CORS
 app.add_middleware(
@@ -32,6 +42,7 @@ app.add_middleware(
 app.include_router(auth_routes.router)
 app.include_router(role_routes.router)
 app.include_router(property_routes.router)
+app.include_router(image_routes.router)
 
 
 @app.get("/")

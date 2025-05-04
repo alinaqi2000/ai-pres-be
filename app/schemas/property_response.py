@@ -1,6 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from .image_response import PropertyImageResponse, UnitImageResponse
 
 class UserResponse(BaseModel):
     id: int
@@ -23,6 +24,7 @@ class UnitResponse(BaseModel):
     floor_id: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
+    images: Optional[List[UnitImageResponse]] = []
 
     class Config:
         from_attributes = True
@@ -48,6 +50,9 @@ class PropertyResponse(BaseModel):
     address: str
     description: Optional[str]
     total_area: float
+    is_published: bool
+    thumbnail: Optional[PropertyImageResponse] = None
+    images: Optional[List[PropertyImageResponse]] = []
     owner: UserResponse
     created_at: datetime
     updated_at: Optional[datetime]
