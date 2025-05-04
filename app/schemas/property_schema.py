@@ -45,16 +45,21 @@ class PropertyBase(BaseModel):
     address: str
     description: Optional[str] = None
     total_area: Optional[float] = None
+    is_published: bool = False
     owner_id: Optional[int] = None
 
 class PropertyCreate(PropertyBase):
-    pass
+    is_published: Optional[bool] = None
 
 class Property(PropertyBase):
     id: int
     floors: List[Floor] = []
     created_at: datetime
     updated_at: Optional[datetime]
+    is_published: bool = False
 
     class Config:
         from_attributes = True
+        model_config = {
+            "from_attributes": True
+        }

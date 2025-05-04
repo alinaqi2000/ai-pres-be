@@ -48,6 +48,7 @@ class PropertyResponse(BaseModel):
     address: str
     description: Optional[str]
     total_area: float
+    is_published: bool
     owner: UserResponse
     created_at: datetime
     updated_at: Optional[datetime]
