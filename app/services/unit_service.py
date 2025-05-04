@@ -9,6 +9,7 @@ class UnitService(BaseService):
         super().__init__(UnitModel)
 
     def create_unit(self, db: Session, floor_id: int, unit_in: UnitCreate) -> Unit:
+        unit_in.floor_id = floor_id
         return self.create(db, unit_in)
 
     def get_unit(self, db: Session, unit_id: int) -> Optional[Unit]:

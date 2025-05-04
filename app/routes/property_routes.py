@@ -50,7 +50,14 @@ async def get_properties(
 ):
     try:
         properties = property_service.get_properties(db, skip, limit, city)
-        return data_response([PropertyResponse.from_orm(p).model_dump(mode='json') for p in properties])
+        property_responses = []
+        for property in properties:
+            # Convert each property to response schema
+            property_data = PropertyResponse.from_orm(property)
+            # Convert floors to response schema
+            property_data.floors = [FloorResponse.from_orm(floor) for floor in property_data.floors]
+            property_responses.append(property_data)
+        return data_response([p.model_dump(mode='json') for p in property_responses])
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -137,10 +144,12 @@ async def create_floor(
             return not_found_error(f"No property found with id {property_id}")
         if property.owner_id != current_user.id:
             return forbidden_error("Not authorized to create floor")
-            
+
         floor = floor_service.create_floor(db, property_id, floor_in)
         floor_response = FloorResponse.from_orm(floor)
         return data_response(floor_response.model_dump(mode='json'))
+    except ValueError as e:
+        return conflict_error(str(e))
     except IntegrityError:
         db.rollback()
         return conflict_error("Floor with this number already exists")
@@ -148,7 +157,7 @@ async def create_floor(
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.get("/{property_id}/floors", response_model=List[Floor])
+@router.get("/{property_id}/floors", response_model=List[FloorResponse])
 async def get_floors(
     property_id: int,
     skip: int = 0,
@@ -163,22 +172,27 @@ async def get_floors(
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.patch("/floors/{floor_id}", response_model=FloorResponse)
+@router.put("/{property_id}/floors/{floor_id}", response_model=FloorResponse)
 async def update_floor(
+    property_id: int,
     floor_id: int,
     floor_in: FloorCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
         floor = floor_service.get_floor(db, floor_id)
         if not floor:
             return not_found_error(f"No floor found with id {floor_id}")
-        if floor.property.owner_id != current_user.get("id"):
+        if floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to update this floor")
             
         updated_floor = floor_service.update_floor(db, floor_id, floor_in)
-        return data_response(updated_floor)
+        floor_response = FloorResponse.from_orm(updated_floor)
+        return data_response(floor_response.model_dump(mode='json'))   
     except IntegrityError:
         db.rollback()
         return conflict_error("Floor with this number already exists")
@@ -186,43 +200,52 @@ async def update_floor(
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.delete("/floors/{floor_id}", response_model=FloorResponse)
+@router.delete("/{property_id}/floors/{floor_id}", response_model=FloorResponse)
 async def delete_floor(
+    property_id: int,
     floor_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
         floor = floor_service.get_floor(db, floor_id)
         if not floor:
             return not_found_error(f"No floor found with id {floor_id}")
-        if floor.property.owner_id != current_user.get("id"):
+        if floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to delete this floor")
             
         if floor_service.delete_floor(db, floor_id):
-            return data_response({"message": "Floor deleted successfully"})
+            return empty_response()
         return internal_server_error("Failed to delete floor")
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 # Unit Routes
-@router.post("/floors/{floor_id}/units/create_unit", response_model=UnitResponse)
+@router.post("/{property_id}/floors/{floor_id}/units", response_model=UnitResponse)
 async def create_unit(
+    property_id: int,
     floor_id: int,
     unit_in: UnitCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
         floor = floor_service.get_floor(db, floor_id)
         if not floor:
             return not_found_error(f"No floor found with id {floor_id}")
-        if floor.property.owner_id != current_user.get("id"):
+        if floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to create unit")
             
         unit = unit_service.create_unit(db, floor_id, unit_in)
-        return data_response(unit)
+        unit_response = UnitResponse.from_orm(unit)
+        return data_response(unit_response.model_dump(mode='json'))
     except IntegrityError:
         db.rollback()
         return conflict_error("Unit with this name already exists")
@@ -230,8 +253,9 @@ async def create_unit(
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.get("/floors/{floor_id}/units", response_model=List[Unit])
+@router.get("/{property_id}/floors/{floor_id}/units", response_model=List[UnitResponse])
 async def get_units(
+    property_id: int,
     floor_id: int,
     skip: int = 0,
     limit: int = 100,
@@ -239,27 +263,34 @@ async def get_units(
 ):
     try:
         units = unit_service.get_units(db, floor_id, skip, limit)
-        return data_response(units)
+        unit_responses = [UnitResponse.from_orm(unit).model_dump(mode='json') for unit in units]
+        return data_response(unit_responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.patch("/units/{unit_id}", response_model=UnitResponse)
+@router.put("/{property_id}/floors/{floor_id}/units/{unit_id}", response_model=UnitResponse)
 async def update_unit(
+    property_id: int,
+    floor_id: int,
     unit_id: int,
     unit_in: UnitCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
         unit = unit_service.get_unit(db, unit_id)
         if not unit:
             return not_found_error(f"No unit found with id {unit_id}")
-        if unit.floor.property.owner_id != current_user.get("id"):
+        if unit.floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to update this unit")
             
         updated_unit = unit_service.update_unit(db, unit_id, unit_in)
-        return data_response(updated_unit)
+        unit_response = UnitResponse.from_orm(updated_unit)
+        return data_response(unit_response.model_dump(mode='json'))
     except IntegrityError:
         db.rollback()
         return conflict_error("Unit with this name already exists")
@@ -267,21 +298,26 @@ async def update_unit(
         traceback.print_exc()
         return internal_server_error(str(e))
 
-@router.delete("/units/{unit_id}", response_model=UnitResponse)
+@router.delete("/{property_id}/floors/{floor_id}/units/{unit_id}", response_model=UnitResponse)
 async def delete_unit(
+    property_id: int,
+    floor_id: int,
     unit_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
         unit = unit_service.get_unit(db, unit_id)
         if not unit:
             return not_found_error(f"No unit found with id {unit_id}")
-        if unit.floor.property.owner_id != current_user.get("id"):
+        if unit.floor.property.owner_id != current_user.id:
             return forbidden_error("Not authorized to delete this unit")
             
         if unit_service.delete_unit(db, unit_id):
-            return data_response({"message": "Unit deleted successfully"})
+            return empty_response()
         return internal_server_error("Failed to delete unit")
     except Exception as e:
         traceback.print_exc()

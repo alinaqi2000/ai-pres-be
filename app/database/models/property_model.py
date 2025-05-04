@@ -1,15 +1,16 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
+from enums.unit_type import UnitType
 
 class Unit(Base):
     __tablename__ = "units"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True)
-    unit_type = Column(String(100))  # 'office', 'shop', 'room'
-    area = Column(Float)
+    unit_type = Column(Enum(UnitType))
+    area = Column(Float, nullable=True)
     description = Column(String(2000), nullable=True)
     has_washroom = Column(Boolean, default=False)
     has_air_conditioning = Column(Boolean, default=False)
@@ -25,12 +26,12 @@ class Floor(Base):
     number = Column(Integer)
     name = Column(String(100), nullable=True)
     description = Column(String(2000), nullable=True)
-    area = Column(Float)
+    area = Column(Float, nullable=True)
     property_id = Column(Integer, ForeignKey("properties.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    units = relationship("Unit", backref="floor")
+    units = relationship("Unit", backref="floor", cascade="all, delete-orphan")
     property = relationship("Property", back_populates="floors")
 
 class Property(Base):
@@ -41,10 +42,10 @@ class Property(Base):
     city = Column(String(100))
     address = Column(String(255))
     description = Column(String(2000), nullable=True)
-    total_area = Column(Float)
+    total_area = Column(Float, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    floors = relationship("Floor", back_populates="property")
+    floors = relationship("Floor", back_populates="property", cascade="all, delete-orphan")
     owner = relationship("User")
