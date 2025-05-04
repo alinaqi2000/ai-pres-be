@@ -1,10 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import json
+from datetime import datetime
+from typing import Any
 
 from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
-from routes import auth_routes, role_routes
+from routes import auth_routes, role_routes, property_routes
+
+def custom_json_encoder(obj: Any) -> Any:
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -23,6 +31,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_routes.router)
 app.include_router(role_routes.router)
+app.include_router(property_routes.router)
 
 
 @app.get("/")

@@ -3,6 +3,10 @@ from typing import List, Optional, Union
 
 from .role_schema import RoleOut
 
+class PasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
+
 
 class UserCreate(BaseModel):
     name: str

@@ -25,5 +25,11 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 
+# Email configuration
+EMAIL_FROM = os.getenv("EMAIL_FROM", "no-reply@ai-pres.com")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "AI PRES")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
+EMAIL_SERVER = os.getenv("EMAIL_SERVER", "mailhog")
+
 # Database URL
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
