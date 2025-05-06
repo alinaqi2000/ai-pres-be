@@ -13,6 +13,8 @@ class Unit(Base):
     unit_type = Column(Enum(UnitType))
     area = Column(Float, nullable=True)
     description = Column(String(2000), nullable=True)
+    monthly_rent = Column(Integer, nullable=False)
+    is_occupied = Column(Boolean, default=True)
     has_washroom = Column(Boolean, default=False)
     has_air_conditioning = Column(Boolean, default=False)
     has_internet = Column(Boolean, default=False)
@@ -53,4 +55,5 @@ class Property(Base):
 
     floors = relationship("Floor", back_populates="property", cascade="all, delete-orphan")
     images = relationship("PropertyImage", back_populates="property", cascade="all, delete-orphan")
+    requests = relationship("TenantRequest", back_populates="property", cascade="all, delete-orphan")
     owner = relationship("User")

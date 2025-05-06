@@ -10,7 +10,7 @@ from config import UPLOAD_DIR
 
 from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
-from routes import auth_routes, role_routes, property_routes, image_routes
+from routes import auth_routes, role_routes, property_routes, image_routes, tenant_request_routes
 
 def custom_json_encoder(obj: Any) -> Any:
     if isinstance(obj, datetime):
@@ -43,6 +43,7 @@ app.include_router(auth_routes.router)
 app.include_router(role_routes.router)
 app.include_router(property_routes.router)
 app.include_router(image_routes.router)
+app.include_router(tenant_request_routes.router)
 
 
 @app.get("/")

@@ -20,6 +20,15 @@ class UnitService(BaseService):
         query = db.query(self.model).filter(self.model.floor_id == floor_id)
         return query.offset(skip).limit(limit).all()
 
+    def get_available_units(self, db: Session, floor_id: int, skip: int = 0, limit: int = 100) -> List[Unit]:
+        query = (
+            db.query(self.model)
+            .filter(self.model.floor_id == floor_id)
+            .filter(self.model.is_occupied == True)
+        )
+        return query.offset(skip).limit(limit).all()
+
+
     def update_unit(self, db: Session, unit_id: int, unit_in: UnitCreate) -> Optional[Unit]:
         db_obj = self.get(db, unit_id)
         if db_obj:

@@ -340,7 +340,7 @@ async def create_unit(
         return internal_server_error(str(e))
 
 @router.get("/{property_id}/floors/{floor_id}/units", response_model=List[UnitResponse])
-async def get_units(
+async def get_unit(
     property_id: int,
     floor_id: int,
     skip: int = 0,
@@ -362,6 +362,31 @@ async def get_units(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
+
+@router.get("/{property_id}/floors/{floor_id}/available_units", response_model=List[UnitResponse])
+async def get_available_units(
+    property_id: int,
+    floor_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+    ):
+    try:
+        my_units = unit_service.get_available_units(db, floor_id, skip, limit)  
+        unit_response: List[UnitResponse] = []
+
+        for unit in my_units:
+            unit_data = UnitResponse.from_orm(unit) 
+            images = db.query(UnitImage).filter(UnitImage.unit_id == unit.id).all()
+            if images:
+                unit_data.images = [UnitImageResponse.from_orm(image) for image in images]
+            unit_response.append(unit_data)
+
+        return data_response([u.model_dump(mode='json') for u in unit_response])
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))            
+            
 
 @router.put("/{property_id}/floors/{floor_id}/units/{unit_id}", response_model=UnitResponse)
 async def update_unit(

@@ -146,7 +146,7 @@ class ImageService:
                 property_id=property_id,
                 image_path=str(file_path)
             )
-            return self.unit_image_service.create(db, image)
+            return self.property_image_service.create(db, image)
         except Exception as e:
             db.rollback()
             raise e
@@ -184,7 +184,7 @@ class ImageService:
                 raise Exception("Maximum number of images (3) reached for this unit")
 
             # Save the file
-            file_path = await self.save_uploaded_file(file, f"unit_{unit_id}_image_{image_count + 1}", unit_id)
+            file_path = await self.save_uploaded_file(file, f"unit_{unit_id}_image_{image_count + 1}", unit.property_id)
 
             # Create image
             image = UnitImageCreate(

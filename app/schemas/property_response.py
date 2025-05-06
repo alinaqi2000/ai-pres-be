@@ -18,6 +18,8 @@ class UnitResponse(BaseModel):
     unit_type: str
     area: float
     description: Optional[str]
+    monthly_rent: float
+    is_occupied: bool
     has_washroom: bool
     has_air_conditioning: bool
     has_internet: bool

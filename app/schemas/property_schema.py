@@ -8,6 +8,8 @@ class UnitBase(BaseModel):
     unit_type: UnitType
     area: Optional[float] = None
     description: Optional[str] = None
+    monthly_rent: int
+    is_occupied: bool
     has_washroom: bool = False
     has_air_conditioning: bool = False
     has_internet: bool = False
@@ -23,7 +25,7 @@ class Unit(UnitBase):
     created_at: datetime
     updated_at: Optional[datetime]
 
-class FloorBase(BaseModel):
+class FloorBase(BaseModel): 
     number: Optional[int] = None
     name: Optional[str] = None
     description: Optional[str] = None
