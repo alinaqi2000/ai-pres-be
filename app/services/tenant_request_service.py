@@ -1,7 +1,7 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
-from database.models.request_model import TenantRequest
-from schemas.request_schema import TenantRequestCreate, TenantRequestUpdate
+from sqlalchemy.orm import Session, joinedload
+from database.models.tenant_request_model import TenantRequest
+from schemas.tenant_request_schema import TenantRequestCreate, TenantRequestUpdate
 from services.base_service import BaseService
 
 
@@ -16,13 +16,34 @@ class TenantRequestService:
         db.refresh(db_obj)
         return db_obj
 
-    def get(self, db: Session, id: int) -> Optional[TenantRequest]:
-        return db.query(self.model).filter(self.model.id == id).first()
+    def get(self, db: Session, request_id: int) -> Optional[TenantRequest]:
+        return (
+            db.query(TenantRequest)
+            .options(
+                joinedload(TenantRequest.tenant),
+                joinedload(TenantRequest.property),
+                joinedload(TenantRequest.floor),
+                joinedload(TenantRequest.unit),
+            )
+            .filter(TenantRequest.id == request_id)
+            .first()
+        )
 
     def get_all(
         self, db: Session, skip: int = 0, limit: int = 100
     ) -> List[TenantRequest]:
-        return db.query(self.model).offset(skip).limit(limit).all()
+        return (
+            db.query(TenantRequest)
+            .options(
+                joinedload(TenantRequest.tenant),
+                joinedload(TenantRequest.property),
+                joinedload(TenantRequest.floor),
+                joinedload(TenantRequest.unit),
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def update(
         self, db: Session, db_obj: TenantRequest, obj_in: TenantRequestUpdate
@@ -46,6 +67,12 @@ class TenantRequestService:
     ) -> List[TenantRequest]:
         return (
             db.query(self.model)
+            .options(
+                joinedload(self.model.tenant),
+                joinedload(self.model.property),
+                joinedload(self.model.floor),
+                joinedload(self.model.unit),
+            )
             .filter(self.model.property_id == property_id)
             .offset(skip)
             .limit(limit)
@@ -57,6 +84,12 @@ class TenantRequestService:
     ) -> List[TenantRequest]:
         return (
             db.query(self.model)
+            .options(
+                joinedload(self.model.tenant),
+                joinedload(self.model.property),
+                joinedload(self.model.floor),
+                joinedload(self.model.unit),
+            )
             .filter(self.model.tenant_id == tenant_id)
             .offset(skip)
             .limit(limit)

@@ -10,6 +10,8 @@ class TenantRequest(Base):
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False)
+    floor_id = Column(Integer, ForeignKey("floors.id"), nullable=False)
+    unit_id = Column(Integer, ForeignKey("units.id"), nullable=False)    
 
     message = Column(Text, nullable=True)
     status = Column(String(50), default="pending")
@@ -23,4 +25,6 @@ class TenantRequest(Base):
     contact_method = Column(String(50), nullable=True)     
 
     tenant = relationship("User")
-    property = relationship("Property", back_populates="requests")
+    property = relationship("Property", back_populates="tenant_requests")
+    floor = relationship("Floor", back_populates="tenant_requests")
+    unit = relationship("Unit", back_populates="tenant_requests")

@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
-from database.models.request_model import TenantRequest
-from database.models.property_model import Property
+from database.models.tenant_request_model import TenantRequest
+from database.models.property_model import Property, Floor, Unit
 from database.models.user_model import User
-from schemas.request_schema import (
+from schemas.tenant_request_schema import (
     TenantRequestCreate,
     TenantRequestUpdate,
     TenantRequestOut,
@@ -13,7 +13,7 @@ from schemas.request_schema import (
 from services.tenant_request_service import TenantRequestService
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
-from responses.error import not_found_error, internal_server_error
+from responses.error import not_found_error, internal_server_error, conflict_error
 
 import traceback
 
@@ -31,18 +31,38 @@ async def create_request(
         return current_user
 
     try:
+        existing = (
+            db.query(TenantRequest)
+            .filter_by(tenant_id=request.tenant_id, unit_id=request.unit_id)
+            .first()
+        )
+        if existing:
+            return conflict_error("Tenant has already made a request for this unit.")
+
         property_exists = db.query(Property).filter_by(id=request.property_id).first()
         if not property_exists:
             return not_found_error(
                 f"Property with id {request.property_id} does not exist"
             )
 
+        floor_exists = db.query(Floor).filter_by(id=request.floor_id).first()
+        if not floor_exists:
+            return not_found_error(f"Floor with id {request.floor_id} does not exist")
+
+        unit_exists = (
+            db.query(Unit).filter_by(id=request.unit_id, is_occupied=False).first()
+        )
+        if not unit_exists:
+            return not_found_error(f"Unit with id {request.unit_id} is not available")
+
         tenant_exists = db.query(User).filter_by(id=request.tenant_id).first()
         if not tenant_exists:
             return not_found_error(f"Tenant with id {request.tenant_id} does not exist")
 
         created = tenant_request_service.create(db, request)
-        return data_response(TenantRequestOut.from_orm(created).model_dump(mode="json"))
+        return data_response(
+            TenantRequestOut.model_validate(created).model_dump(mode="json")
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -61,7 +81,10 @@ async def list_all_requests(
     try:
         requests = tenant_request_service.get_all(db, skip, limit)
         return data_response(
-            [TenantRequestOut.from_orm(r).model_dump(mode="json") for r in requests]
+            [
+                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                for r in requests
+            ]
         )
     except Exception as e:
         traceback.print_exc()
@@ -81,7 +104,9 @@ def get_request(
         request = tenant_request_service.get(db, request_id)
         if not request:
             return not_found_error(f"Tenant request with ID {request_id} not found")
-        return data_response(TenantRequestOut.from_orm(request).model_dump(mode="json"))
+        return data_response(
+            TenantRequestOut.model_validate(request).model_dump(mode="json")
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -102,7 +127,9 @@ def update_request(
         if not db_obj:
             return not_found_error(f"Tenant request with ID {request_id} not found")
         updated = tenant_request_service.update(db, db_obj, update_data)
-        return data_response(TenantRequestOut.from_orm(updated).model_dump(mode="json"))
+        return data_response(
+            TenantRequestOut.model_validate(updated).model_dump(mode="json")
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -145,7 +172,10 @@ async def get_requests_by_property(
 
         requests = tenant_request_service.get_by_property(db, property_id, skip, limit)
         return data_response(
-            [TenantRequestOut.from_orm(r).model_dump(mode="json") for r in requests]
+            [
+                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                for r in requests
+            ]
         )
     except Exception as e:
         traceback.print_exc()
@@ -170,7 +200,10 @@ async def get_requests_by_tenant(
 
         requests = tenant_request_service.get_by_tenant(db, tenant_id, skip, limit)
         return data_response(
-            [TenantRequestOut.from_orm(r).model_dump(mode="json") for r in requests]
+            [
+                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                for r in requests
+            ]
         )
     except Exception as e:
         traceback.print_exc()

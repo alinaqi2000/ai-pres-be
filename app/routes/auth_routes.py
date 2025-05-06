@@ -76,7 +76,7 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
         )
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to login", str(e))
+        return internal_server_error(str(e))
 
 
 # ------------------ GET ALL USERS ------------------

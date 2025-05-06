@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from .image_response import PropertyImageResponse, UnitImageResponse
 
@@ -69,3 +69,30 @@ class PropertyListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PropertyMinimumResponse(BaseModel):
+    id: int
+    name: str
+    city: str
+    address: str
+
+    model_config = ConfigDict(from_attributes=True) 
+
+
+class FloorMinimumResponse(BaseModel):
+    id: int
+    number: int
+    name: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True) 
+
+
+class UnitMinimumResponse(BaseModel):    
+    id: int
+    name: str
+    unit_type: str
+    area: float
+    monthly_rent: float
+    images: Optional[List[UnitImageResponse]] = []
+
+    model_config = ConfigDict(from_attributes=True) 

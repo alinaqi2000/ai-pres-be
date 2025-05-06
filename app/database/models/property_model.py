@@ -23,6 +23,7 @@ class Unit(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     images = relationship("UnitImage", back_populates="unit", cascade="all, delete-orphan")
+    tenant_requests = relationship("TenantRequest", back_populates="unit")
 
 class Floor(Base):
     __tablename__ = "floors"
@@ -38,6 +39,8 @@ class Floor(Base):
 
     units = relationship("Unit", backref="floor", cascade="all, delete-orphan")
     property = relationship("Property", back_populates="floors")
+    tenant_requests = relationship("TenantRequest", back_populates="floor")
+
 
 class Property(Base):
     __tablename__ = "properties"
@@ -55,5 +58,5 @@ class Property(Base):
 
     floors = relationship("Floor", back_populates="property", cascade="all, delete-orphan")
     images = relationship("PropertyImage", back_populates="property", cascade="all, delete-orphan")
-    requests = relationship("TenantRequest", back_populates="property", cascade="all, delete-orphan")
+    tenant_requests = relationship("TenantRequest", back_populates="property", cascade="all, delete-orphan")
     owner = relationship("User")

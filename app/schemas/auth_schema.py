@@ -49,3 +49,11 @@ class ResponseModel(BaseModel):
     message: str
     data: Optional[Union[Token, UserUpdate]] = None
     error: Optional[dict] = None
+
+class UserMinimumResponse(BaseModel):
+    name: str
+    email: EmailStr
+    city: str
+
+    class Config:
+        from_attributes = True
