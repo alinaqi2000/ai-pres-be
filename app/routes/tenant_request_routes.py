@@ -11,7 +11,7 @@ from schemas.request_schema import (
     TenantRequestOut,
 )
 from services.tenant_request_service import TenantRequestService
-from utils.dependencies import get_db
+from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
 from responses.error import not_found_error, internal_server_error
 
@@ -22,7 +22,14 @@ tenant_request_service = TenantRequestService()
 
 
 @router.post("/create_request", response_model=TenantRequestOut)
-async def create_request(request: TenantRequestCreate, db: Session = Depends(get_db)):
+async def create_request(
+    request: TenantRequestCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         property_exists = db.query(Property).filter_by(id=request.property_id).first()
         if not property_exists:
@@ -43,8 +50,14 @@ async def create_request(request: TenantRequestCreate, db: Session = Depends(get
 
 @router.get("/all_requests", response_model=List[TenantRequestOut])
 async def list_all_requests(
-    skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         requests = tenant_request_service.get_all(db, skip, limit)
         return data_response(
@@ -56,7 +69,14 @@ async def list_all_requests(
 
 
 @router.get("/{request_id}", response_model=TenantRequestOut)
-def get_request(request_id: int, db: Session = Depends(get_db)):
+def get_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         request = tenant_request_service.get(db, request_id)
         if not request:
@@ -69,8 +89,14 @@ def get_request(request_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{request_id}", response_model=TenantRequestOut)
 def update_request(
-    request_id: int, update_data: TenantRequestUpdate, db: Session = Depends(get_db)
+    request_id: int,
+    update_data: TenantRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         db_obj = tenant_request_service.get(db, request_id)
         if not db_obj:
@@ -83,7 +109,14 @@ def update_request(
 
 
 @router.delete("/{request_id}")
-async def delete_request(request_id: int, db: Session = Depends(get_db)):
+async def delete_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         success = tenant_request_service.delete(db, request_id)
         if not success:
@@ -96,8 +129,15 @@ async def delete_request(request_id: int, db: Session = Depends(get_db)):
 
 @router.get("/property/{property_id}", response_model=List[TenantRequestOut])
 async def get_requests_by_property(
-    property_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    property_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=(Depends(get_current_user)),
 ):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         property_obj = db.query(Property).filter(Property.id == property_id).first()
         if not property_obj:
@@ -114,8 +154,15 @@ async def get_requests_by_property(
 
 @router.get("/tenant/{tenant_id}", response_model=List[TenantRequestOut])
 async def get_requests_by_tenant(
-    tenant_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+    tenant_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         tenant = db.query(User).filter_by(id=tenant_id).first()
         if not tenant:
