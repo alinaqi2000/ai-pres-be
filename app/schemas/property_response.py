@@ -2,6 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from .image_response import PropertyImageResponse, UnitImageResponse
+from enums.unit_type import UnitType
 
 class UserResponse(BaseModel):
     id: int
@@ -15,7 +16,7 @@ class UserResponse(BaseModel):
 class UnitResponse(BaseModel):
     id: int
     name: str
-    unit_type: str
+    unit_type: UnitType
     area: float
     description: Optional[str]
     monthly_rent: float
@@ -90,8 +91,7 @@ class FloorMinimumResponse(BaseModel):
 class UnitMinimumResponse(BaseModel):    
     id: int
     name: str
-    unit_type: str
-    area: float
+    unit_type: UnitType
     monthly_rent: float
     images: Optional[List[UnitImageResponse]] = []
 

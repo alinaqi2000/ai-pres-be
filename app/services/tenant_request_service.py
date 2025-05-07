@@ -1,6 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from database.models.tenant_request_model import TenantRequest
+from database.models.user_model import User
 from schemas.tenant_request_schema import TenantRequestCreate, TenantRequestUpdate
 from services.base_service import BaseService
 
@@ -14,6 +15,7 @@ class TenantRequestService:
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
+
         return db_obj
 
     def get(self, db: Session, request_id: int) -> Optional[TenantRequest]:

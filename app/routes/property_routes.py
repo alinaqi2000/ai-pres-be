@@ -11,7 +11,7 @@ from services.floor_service import FloorService
 from services.unit_service import UnitService
 from schemas.property_schema import PropertyCreate, Property, FloorCreate, Floor, UnitCreate, Unit
 from schemas.property_response import PropertyResponse, PropertyListResponse, FloorResponse, UnitResponse
-from responses.error import internal_server_error, conflict_error, forbidden_error
+from responses.error import internal_server_error, conflict_error, forbidden_error, not_found_error
 from responses.success import data_response, empty_response
 from utils.dependencies import get_current_user
 import traceback

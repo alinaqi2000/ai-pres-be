@@ -10,17 +10,17 @@ from .auth_schema import UserMinimumResponse
 
 
 class TenantRequestBase(BaseModel):
+    tenant_id: Optional[int] = None
+    property_id: int
+    floor_id: int
+    unit_id: int
     message: Optional[str] = None
     preferred_move_in: Optional[datetime] = None
     monthly_offer: Optional[int] = None
 
 
 class TenantRequestCreate(TenantRequestBase):
-    tenant_id: int
-    property_id: int
-    floor_id: int
-    unit_id: int
-
+    pass
     
 class TenantRequestUpdate(BaseModel):
     status: Optional[str] = None

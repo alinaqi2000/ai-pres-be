@@ -5,6 +5,7 @@ from typing import List
 from database.models.tenant_request_model import TenantRequest
 from database.models.property_model import Property, Floor, Unit
 from database.models.user_model import User
+from schemas.property_schema import PropertyCreate
 from schemas.tenant_request_schema import (
     TenantRequestCreate,
     TenantRequestUpdate,
@@ -13,7 +14,7 @@ from schemas.tenant_request_schema import (
 from services.tenant_request_service import TenantRequestService
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
-from responses.error import not_found_error, internal_server_error, conflict_error
+from responses.error import not_found_error, internal_server_error, conflict_error, forbidden_error
 
 import traceback
 
@@ -33,7 +34,7 @@ async def create_request(
     try:
         existing = (
             db.query(TenantRequest)
-            .filter_by(tenant_id=request.tenant_id, unit_id=request.unit_id)
+            .filter_by(tenant_id=current_user.id, unit_id=request.unit_id)
             .first()
         )
         if existing:
@@ -55,10 +56,7 @@ async def create_request(
         if not unit_exists:
             return not_found_error(f"Unit with id {request.unit_id} is not available")
 
-        tenant_exists = db.query(User).filter_by(id=request.tenant_id).first()
-        if not tenant_exists:
-            return not_found_error(f"Tenant with id {request.tenant_id} does not exist")
-
+        request.tenant_id = current_user.id
         created = tenant_request_service.create(db, request)
         return data_response(
             TenantRequestOut.model_validate(created).model_dump(mode="json")
@@ -126,10 +124,15 @@ def update_request(
         db_obj = tenant_request_service.get(db, request_id)
         if not db_obj:
             return not_found_error(f"Tenant request with ID {request_id} not found")
-        updated = tenant_request_service.update(db, db_obj, update_data)
-        return data_response(
-            TenantRequestOut.model_validate(updated).model_dump(mode="json")
-        )
+
+        # Access owner_id from the property associated with the tenant request
+        if current_user.id == db_obj.property.owner_id:
+            updated = tenant_request_service.update(db, db_obj, update_data)
+            return data_response(
+                TenantRequestOut.model_validate(updated).model_dump(mode="json")
+            )
+        else:
+            return forbidden_error("Not authorized to update this request")
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
