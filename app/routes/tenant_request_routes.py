@@ -5,7 +5,6 @@ from typing import List
 from database.models.tenant_request_model import TenantRequest
 from database.models.property_model import Property, Floor, Unit
 from database.models.user_model import User
-from schemas.property_schema import PropertyCreate
 from schemas.tenant_request_schema import (
     TenantRequestCreate,
     TenantRequestUpdate,
@@ -14,7 +13,12 @@ from schemas.tenant_request_schema import (
 from services.tenant_request_service import TenantRequestService
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
-from responses.error import not_found_error, internal_server_error, conflict_error, forbidden_error
+from responses.error import (
+    not_found_error,
+    internal_server_error,
+    conflict_error,
+    forbidden_error,
+)
 
 import traceback
 
@@ -125,7 +129,6 @@ def update_request(
         if not db_obj:
             return not_found_error(f"Tenant request with ID {request_id} not found")
 
-        # Access owner_id from the property associated with the tenant request
         if current_user.id == db_obj.property.owner_id:
             updated = tenant_request_service.update(db, db_obj, update_data)
             return data_response(

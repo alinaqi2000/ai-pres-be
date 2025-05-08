@@ -16,7 +16,12 @@ from schemas.auth_schema import (
 )
 
 from database.init import get_db
-from utils.dependencies import hash_password, verify_password, create_access_token, get_current_user
+from utils.dependencies import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    get_current_user,
+)
 from services.auth_service import (
     create_user,
     get_user_by_email,
@@ -40,8 +45,6 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 email_service = EmailService()
 
-# ------------------ SIGN UP ------------------
-
 
 @router.post("/signup", response_model=ResponseModel)
 def signup(payload: UserCreate, db: Session = Depends(get_db)):
@@ -60,9 +63,6 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
         return internal_server_error("Failed to register user", str(e))
 
 
-# ------------------ SIGN IN ------------------
-
-
 @router.post("/signin", response_model=ResponseModel)
 def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
     try:
@@ -79,9 +79,6 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
         return internal_server_error(str(e))
 
 
-# ------------------ GET ALL USERS ------------------
-
-
 @router.get("/get_all", response_model=List[UserOut])
 def get_all_users_endpoint(
     db: Session = Depends(get_db), current_user=Depends(get_current_user)
@@ -91,9 +88,6 @@ def get_all_users_endpoint(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to retrieve users", str(e))
-
-
-# ------------------ GET USER BY ID ------------------
 
 
 @router.get("/user/{user_id}", response_model=Union[UserOut, ResponseModel])
@@ -109,8 +103,6 @@ def get_user(
         traceback.print_exc()
         return internal_server_error("Failed to fetch user", str(e))
 
-
-# ------------------ DELETE USER BY ID ------------------
 
 @router.delete("/user/{user_id}", response_model=ResponseModel)
 def delete_user_by_id(
@@ -128,9 +120,6 @@ def delete_user_by_id(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to delete user", str(e))
-
-
-# ------------------ Update USER BY ID ------------------
 
 
 @router.patch("/user/{user_id}", response_model=Union[ResponseModel, UserUpdate])
@@ -157,8 +146,6 @@ def update_user_route(
         return internal_server_error("Failed to update user", str(e))
 
 
-# ------------------ PASSWORD RESET ------------------
-
 @router.post("/reset-password", response_model=ResponseModel)
 async def reset_password(email: str, db: Session = Depends(get_db)):
     try:
@@ -166,55 +153,49 @@ async def reset_password(email: str, db: Session = Depends(get_db)):
         if not user:
             return not_found_error("User not found")
 
-        # Generate a new 8-character alphanumeric password
-        new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        
-        # Update user's password
+        new_password = "".join(
+            random.choices(string.ascii_letters + string.digits, k=8)
+        )
+
         user.hashed_password = hash_password(new_password)
         db.commit()
-        
+
         # Send the new password to user's email
         await email_service.send_new_password_email(email, new_password)
-        
+
         return success_response(
             "Password reset successfully",
-            {"message": "Check your email for the new password"}
+            {"message": "Check your email for the new password"},
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
-
-# ------------------ UPDATE PASSWORD ------------------
 
 @router.patch("/password", response_model=ResponseModel)
 async def update_password(
     payload: PasswordUpdate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
 
     try:
-        # Verify current password
         if not verify_password(payload.current_password, current_user.hashed_password):
             return unauthorized_error("Current password is incorrect")
 
-        # Update password
         current_user.hashed_password = hash_password(payload.new_password)
         db.commit()
         db.refresh(current_user)
 
         return success_response(
-            "Password updated successfully",
-            {"message": "Password has been updated"}
+            "Password updated successfully", {"message": "Password has been updated"}
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
-# ------------------ DELETE USER BY ID ------------------
 
 @router.delete("/{user_id}", response_model=ResponseModel)
 def delete_user_by_id(
@@ -228,5 +209,3 @@ def delete_user_by_id(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to delete user", str(e))
-
-

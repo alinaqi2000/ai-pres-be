@@ -1,9 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
-from database.models.tenant_request_model import TenantRequest
-from database.models.user_model import User
+from database.models import TenantRequest
 from schemas.tenant_request_schema import TenantRequestCreate, TenantRequestUpdate
-from services.base_service import BaseService
 
 
 class TenantRequestService:

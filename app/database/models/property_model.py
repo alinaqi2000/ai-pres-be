@@ -1,8 +1,18 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Enum,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
 from enums.unit_type import UnitType
+
 
 class Unit(Base):
     __tablename__ = "units"
@@ -21,9 +31,12 @@ class Unit(Base):
     floor_id = Column(Integer, ForeignKey("floors.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    images = relationship("UnitImage", back_populates="unit", cascade="all, delete-orphan")
+
+    images = relationship(
+        "UnitImage", back_populates="unit", cascade="all, delete-orphan"
+    )
     tenant_requests = relationship("TenantRequest", back_populates="unit")
+
 
 class Floor(Base):
     __tablename__ = "floors"
@@ -56,7 +69,13 @@ class Property(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    floors = relationship("Floor", back_populates="property", cascade="all, delete-orphan")
-    images = relationship("PropertyImage", back_populates="property", cascade="all, delete-orphan")
-    tenant_requests = relationship("TenantRequest", back_populates="property", cascade="all, delete-orphan")
+    floors = relationship(
+        "Floor", back_populates="property", cascade="all, delete-orphan"
+    )
+    images = relationship(
+        "PropertyImage", back_populates="property", cascade="all, delete-orphan"
+    )
+    tenant_requests = relationship(
+        "TenantRequest", back_populates="property", cascade="all, delete-orphan"
+    )
     owner = relationship("User")

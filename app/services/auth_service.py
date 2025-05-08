@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 
-from database.models.user_model import User
+from database.models import User
 from schemas.auth_schema import UserCreate, UserUpdate
 from utils.dependencies import hash_password
 

@@ -15,7 +15,6 @@ class BookingBase(BaseModel):
 
 
 class BookingCreate(BookingBase):
-    # tenant_id will be set from the current_user
     pass
 
 
@@ -36,3 +35,7 @@ class BookingOut(BookingBase):
 
     class Config:
         from_attributes = True
+
+
+class BookingStatusUpdate(BaseModel):
+    status: BookingStatus = str

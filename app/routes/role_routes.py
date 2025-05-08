@@ -5,7 +5,6 @@ import traceback
 from typing import List, Union
 
 from database.init import get_db
-from database.models.role_model import Role
 from schemas.role_schema import RoleCreate, RoleUpdate, ResponseModel, RoleOut
 from utils.dependencies import get_current_user
 from services.role_service import (
@@ -17,15 +16,9 @@ from services.role_service import (
 )
 
 from responses.success import data_response
-from responses.error import (
-    conflict_error,
-    not_found_error,
-    internal_server_error
-)
+from responses.error import conflict_error, not_found_error, internal_server_error
 
 router = APIRouter(prefix="/roles", tags=["Roles"])
-
-# ------------------ CREATE ROLE ------------------
 
 
 @router.post("/create_role", response_model=ResponseModel)
@@ -45,9 +38,6 @@ def create_role_route(
         return internal_server_error("Failed to create role", str(e))
 
 
-# ------------------ GET ALL ROLES ------------------
-
-
 @router.get("/get_all_role", response_model=List[RoleCreate])
 def get_roles_route(
     db: Session = Depends(get_db), current_user=Depends(get_current_user)
@@ -58,9 +48,6 @@ def get_roles_route(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to retrieve roles", str(e))
-
-
-# ------------------ GET ROLE BY ID ------------------
 
 
 @router.get("/{role_id}", response_model=Union[RoleCreate, ResponseModel])
@@ -75,9 +62,6 @@ def get_role_by_id_route(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to retrieve role", str(e))
-
-
-# ------------------ UPDATE ROLE ------------------
 
 
 @router.patch("/{role_id}", response_model=ResponseModel)
@@ -98,9 +82,6 @@ def update_role_route(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to update role", str(e))
-
-
-# ------------------ DELETE ROLE ------------------
 
 
 @router.delete("/{role_id}", response_model=ResponseModel)

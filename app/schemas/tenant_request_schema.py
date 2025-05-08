@@ -21,7 +21,8 @@ class TenantRequestBase(BaseModel):
 
 class TenantRequestCreate(TenantRequestBase):
     pass
-    
+
+
 class TenantRequestUpdate(BaseModel):
     status: Optional[str] = None
     is_seen: Optional[bool] = None
@@ -38,6 +39,4 @@ class TenantRequestOut(TenantRequestBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(
-        from_attributes=True
-    )
+    model_config = ConfigDict(from_attributes=True)

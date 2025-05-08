@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from database.models.role_model import Role
+from database.models import Role
 
 from schemas.role_schema import RoleCreate, RoleUpdate
+
 
 def create_role(payload: RoleCreate, db: Session):
     role = Role(**payload.dict())
@@ -10,11 +11,14 @@ def create_role(payload: RoleCreate, db: Session):
     db.refresh(role)
     return role
 
+
 def get_all_roles(db: Session):
     return db.query(Role).all()
 
+
 def get_role_by_id(role_id: int, db: Session):
     return db.query(Role).filter(Role.id == role_id).first()
+
 
 def update_role(role_id: int, payload: RoleUpdate, db: Session):
     role = get_role_by_id(role_id, db)
@@ -25,6 +29,7 @@ def update_role(role_id: int, payload: RoleUpdate, db: Session):
     db.commit()
     db.refresh(role)
     return role
+
 
 def delete_role(role_id: int, db: Session):
     role = get_role_by_id(role_id, db)

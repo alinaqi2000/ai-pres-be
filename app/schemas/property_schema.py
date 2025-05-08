@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from enums.unit_type import UnitType
 
+
 class UnitBase(BaseModel):
     name: str
     unit_type: UnitType
@@ -16,8 +17,10 @@ class UnitBase(BaseModel):
     floor_id: Optional[int] = None
     property_id: Optional[int] = None
 
+
 class UnitCreate(UnitBase):
     pass
+
 
 class Unit(UnitBase):
     id: int
@@ -25,15 +28,18 @@ class Unit(UnitBase):
     created_at: datetime
     updated_at: Optional[datetime]
 
-class FloorBase(BaseModel): 
+
+class FloorBase(BaseModel):
     number: Optional[int] = None
     name: Optional[str] = None
     description: Optional[str] = None
     area: Optional[float] = None
     property_id: Optional[int] = None
 
+
 class FloorCreate(FloorBase):
     pass
+
 
 class Floor(FloorBase):
     id: int
@@ -41,6 +47,7 @@ class Floor(FloorBase):
     units: List[Unit] = []
     created_at: datetime
     updated_at: Optional[datetime]
+
 
 class PropertyBase(BaseModel):
     name: str
@@ -51,8 +58,10 @@ class PropertyBase(BaseModel):
     is_published: bool = False
     owner_id: Optional[int] = None
 
+
 class PropertyCreate(PropertyBase):
     is_published: Optional[bool] = None
+
 
 class Property(PropertyBase):
     id: int
@@ -63,6 +72,4 @@ class Property(PropertyBase):
 
     class Config:
         from_attributes = True
-        model_config = {
-            "from_attributes": True
-        }
+        model_config = {"from_attributes": True}

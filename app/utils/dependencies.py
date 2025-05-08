@@ -10,15 +10,10 @@ from database.init import get_db
 from database.models.user_model import User
 from config import ALGORITHM, SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
 
-from responses.error import (
-    unauthorized_error,
-    not_found_error
-)
+from responses.error import unauthorized_error, not_found_error
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/signin")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# ------------------ Hashing and Verify Password ------------------
 
 
 def hash_password(password):
@@ -29,9 +24,6 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# ------------------ Create Access Token ------------------
-
-
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
@@ -39,9 +31,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-# ------------------ GET Current User ------------------
 
 
 def get_current_user(

@@ -29,6 +29,7 @@ class ResponseModel(BaseModel):
 
     updated_at: Optional[datetime]
 
+
 class RoleOut(RoleBase):
     id: int
 

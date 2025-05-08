@@ -1,12 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 import traceback
 
-from schemas.booking_schema import BookingCreate, BookingUpdate, BookingOut
+from schemas.booking_schema import (
+    BookingCreate,
+    BookingUpdate,
+    BookingOut,
+    BookingStatusUpdate,
+)
 from services.booking_service import BookingService
-from database.models.user_model import User  # Assuming User model for current_user
-from database.models.property_model import Property  # For checking ownership
+from database.models.user_model import User
+from database.models.property_model import Property
+from database.models import Floor
+from database.models import Unit
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
 from responses.error import (
@@ -21,41 +28,45 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 booking_service = BookingService()
 
 
-@router.post("/", response_model=BookingOut)
-def create_booking(
+@router.post("/create_booking", response_model=BookingOut)
+def create_bookings(
     booking_in: BookingCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
-        return current_user  # Assuming error response if not User instance
-
+        return current_user
     try:
-        # Basic check: Property, Floor, Unit must exist (can be enhanced with dependencies)
-        prop = db.query(Property).filter(Property.id == booking_in.property_id).first()
-        if not prop:
+        property = (
+            db.query(Property).filter(Property.id == booking_in.property_id).first()
+        )
+        if not property:
             return not_found_error(
                 f"Property with ID {booking_in.property_id} not found."
             )
-        # Add similar checks for floor and unit if not handled by service or DB constraints
+        floor = db.query(Floor).filter(Floor.id == booking_in.floor_id).first()
+        if not floor:
+            return not_found_error(f"Floor with ID {booking_in.floor_id} not found.")
+        unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
+        if not unit:
+            return not_found_error(f"Unit with ID {booking_in.unit_id} not found.")
 
         created_booking = booking_service.create(db, booking_in, current_user.id)
         if not created_booking:
-            # Service layer might return None if unit is unavailable or other business rule violation
             return conflict_error(
                 "Could not create booking. Unit might be unavailable or request invalid."
             )
         return data_response(
             BookingOut.model_validate(created_booking).model_dump(mode="json")
         )
-    except ValueError as ve:  # Catch specific errors from service layer
+    except ValueError as ve:
         return conflict_error(str(ve))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/my-bookings", response_model=List[BookingOut])
+@router.get("/my_bookings", response_model=List[BookingOut])
 def get_my_bookings(
     skip: int = 0,
     limit: int = 100,
@@ -74,7 +85,7 @@ def get_my_bookings(
         return internal_server_error(str(e))
 
 
-@router.get("/property-owner", response_model=List[BookingOut])
+@router.get("/property_owner", response_model=List[BookingOut])
 def get_bookings_for_my_properties(
     skip: int = 0,
     limit: int = 100,
@@ -84,7 +95,6 @@ def get_bookings_for_my_properties(
     if not isinstance(current_user, User):
         return current_user
     try:
-        # This assumes current_user.id is the owner_id for properties
         bookings = booking_service.get_by_property_owner(
             db, current_user.id, skip, limit
         )
@@ -100,7 +110,7 @@ def get_bookings_for_my_properties(
 def get_booking(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # For auth if needed
+    current_user: User = Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -109,7 +119,6 @@ def get_booking(
         if not booking:
             return not_found_error(f"Booking with ID {booking_id} not found.")
 
-        # Authorization: Only tenant or property owner can view?
         prop = db.query(Property).filter(Property.id == booking.property_id).first()
         if not (
             booking.tenant_id == current_user.id
@@ -137,30 +146,25 @@ def update_booking(
         if not db_booking:
             return not_found_error(f"Booking with ID {booking_id} not found.")
 
-        # Authorization: Who can update? Tenant can update notes/dates if PENDING? Owner can update status?
         can_update = False
         prop = db.query(Property).filter(Property.id == db_booking.property_id).first()
         is_owner = prop and prop.owner_id == current_user.id
 
-        # Allow tenant to update certain fields if booking is PENDING
         if (
             db_booking.tenant_id == current_user.id
             and db_booking.status == BookingStatus.PENDING
         ):
-            # Tenant might only be allowed to change dates or notes, not status or price directly
             allowed_tenant_updates = ["start_date", "end_date", "notes"]
             for field in booking_in.model_dump(exclude_unset=True).keys():
                 if field not in allowed_tenant_updates:
                     return forbidden_error(f"Tenants cannot update '{field}'.")
             can_update = True
         elif is_owner:
-            # Owner might be allowed to update status or price
-            # Specific logic for status changes should be in update_status service method
             if booking_in.status and booking_in.status != db_booking.status:
                 return forbidden_error(
                     "Please use the dedicated status update endpoint for changing booking status."
                 )
-            can_update = True  # Broad permission for other fields by owner
+            can_update = True
 
         if not can_update:
             return forbidden_error(
@@ -185,7 +189,7 @@ def update_booking(
 @router.patch("/{booking_id}/status", response_model=BookingOut)
 def update_booking_status(
     booking_id: int,
-    status: BookingStatus,  # Pass status directly in the body for this endpoint
+    status_update: BookingStatusUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -200,7 +204,7 @@ def update_booking_status(
         is_owner = prop and prop.owner_id == current_user.id
 
         updated_booking = booking_service.update_status(
-            db, booking_id, status, current_user.id, is_owner
+            db, booking_id, status_update.status, current_user.id, is_owner
         )
         if not updated_booking:
             return forbidden_error(
@@ -238,7 +242,7 @@ def delete_booking(
             return forbidden_error(
                 "Not authorized to delete this booking or deletion not allowed at current stage."
             )
-        return empty_response(message="Booking deleted successfully.")
+        return empty_response()
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

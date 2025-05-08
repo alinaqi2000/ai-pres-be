@@ -4,6 +4,7 @@ from datetime import datetime
 from .image_response import PropertyImageResponse, UnitImageResponse
 from enums.unit_type import UnitType
 
+
 class UserResponse(BaseModel):
     id: int
     name: str
@@ -12,6 +13,7 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class UnitResponse(BaseModel):
     id: int
@@ -32,6 +34,7 @@ class UnitResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class FloorResponse(BaseModel):
     id: int
     number: int
@@ -45,6 +48,7 @@ class FloorResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class PropertyResponse(BaseModel):
     id: int
@@ -64,6 +68,7 @@ class PropertyResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class PropertyListResponse(BaseModel):
     total: int
     items: List[PropertyResponse]
@@ -71,13 +76,14 @@ class PropertyListResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class PropertyMinimumResponse(BaseModel):
     id: int
     name: str
     city: str
     address: str
 
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FloorMinimumResponse(BaseModel):
@@ -85,14 +91,14 @@ class FloorMinimumResponse(BaseModel):
     number: int
     name: Optional[str]
 
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)
 
 
-class UnitMinimumResponse(BaseModel):    
+class UnitMinimumResponse(BaseModel):
     id: int
     name: str
     unit_type: UnitType
     monthly_rent: float
     images: Optional[List[UnitImageResponse]] = []
 
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)

@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from database.models.booking_model import Booking
-from database.models.property_model import Property, Unit
+from database.models import Property, Unit
 from schemas.booking_schema import BookingCreate, BookingUpdate
 from enums.booking_status import BookingStatus
 
@@ -29,7 +29,6 @@ class BookingService:
     def get_by_property_owner(
         self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
-        # This requires joining Booking with Property to filter by owner_id
         return (
             db.query(Booking)
             .join(Property)
@@ -61,12 +60,9 @@ class BookingService:
         """Checks if the unit is available for the given period, excluding a specific booking (for updates)."""
         query = db.query(Booking).filter(
             Booking.unit_id == unit_id,
-            Booking.status.in_(
-                [BookingStatus.CONFIRMED, BookingStatus.ACTIVE]
-            ),  # Consider only confirmed/active bookings for conflicts
-            Booking.start_date
-            < end_date,  # New booking starts before existing one ends
-            Booking.end_date > start_date,  # New booking ends after existing one starts
+            Booking.status.in_([BookingStatus.CONFIRMED, BookingStatus.ACTIVE]),
+            Booking.start_date < end_date,
+            Booking.end_date > start_date,
         )
         if exclude_booking_id:
             query = query.filter(Booking.id != exclude_booking_id)
@@ -77,37 +73,19 @@ class BookingService:
     def create(
         self, db: Session, booking_in: BookingCreate, tenant_id: int
     ) -> Optional[Booking]:
-        # 1. Check if unit exists and is not generally marked as unavailable/occupied indefinitely
         unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
         if not unit:
-            # This case should ideally be caught by a route dependency or earlier check
-            return None  # Or raise an exception: raise ValueError("Unit not found")
-        if unit.is_occupied:  # General flag on the unit model itself
-            # Or raise an exception: raise ValueError("Unit is already occupied")
+            return None
+        if unit.is_occupied:
             return None
 
-        # 2. Check for booking conflicts
         if not self.is_unit_available(
             db, booking_in.unit_id, booking_in.start_date, booking_in.end_date
         ):
-            # Or raise an exception: raise ValueError("Unit is not available for the selected dates")
             return None
 
-        # 3. Prevent tenant from booking the same unit for overlapping periods if desired (optional)
-        # existing_tenant_booking = db.query(Booking).filter(
-        #     Booking.tenant_id == tenant_id,
-        #     Booking.unit_id == booking_in.unit_id,
-        #     Booking.status.in_([BookingStatus.CONFIRMED, BookingStatus.ACTIVE]),
-        #     Booking.start_date < booking_in.end_date,
-        #     Booking.end_date > booking_in.start_date
-        # ).first()
-        # if existing_tenant_booking:
-        #     return None # Or raise an exception: raise ValueError("Tenant already has an overlapping booking for this unit")
-
         db_booking = Booking(
-            **booking_in.model_dump(),
-            tenant_id=tenant_id,
-            status=BookingStatus.PENDING  # Initial status
+            **booking_in.model_dump(), tenant_id=tenant_id, status=BookingStatus.PENDING
         )
         db.add(db_booking)
         db.commit()
@@ -134,14 +112,12 @@ class BookingService:
                 new_end_date,
                 exclude_booking_id=db_booking.id,
             ):
-                return None  # Or raise an exception
+                return None
 
         for field, value in update_data.items():
             setattr(db_booking, field, value)
 
-        db_booking.updated_at = (
-            datetime.utcnow()
-        )  # Manually update timestamp if not auto by DB trigger
+        db_booking.updated_at = datetime.now()
         db.commit()
         db.refresh(db_booking)
         return db_booking
@@ -153,26 +129,17 @@ class BookingService:
         if not db_booking:
             return False
 
-        # Logic for who can delete (e.g., tenant can cancel PENDING, owner can cancel almost anytime)
         can_delete = False
         if (
             db_booking.tenant_id == user_id
             and db_booking.status == BookingStatus.PENDING
         ):
             can_delete = True
-            # Optionally change status to CANCELLED_BY_TENANT instead of hard delete
-            # db_booking.status = BookingStatus.CANCELLED_BY_TENANT
-            # db.commit()
-            # return True
-        elif is_owner:  # Add more granular checks for owner if needed
+        elif is_owner:
             can_delete = True
-            # Optionally change status to CANCELLED_BY_OWNER
-            # db_booking.status = BookingStatus.CANCELLED_BY_OWNER
-            # db.commit()
-            # return True
 
         if not can_delete:
-            return False  # Or raise a permission error
+            return False
 
         db.delete(db_booking)
         db.commit()
@@ -191,17 +158,11 @@ class BookingService:
         if not db_booking:
             return None
 
-        # Authorization: Who can change to what status?
-        # Example: Owner can confirm a PENDING booking
         if (
             is_owner
             and db_booking.status == BookingStatus.PENDING
             and new_status == BookingStatus.CONFIRMED
         ):
-            # Additional logic for CONFIRMED: mark unit as occupied if applicable by your design
-            # unit = db.query(Unit).filter(Unit.id == db_booking.unit_id).first()
-            # if unit:
-            #     unit.is_occupied = True # This needs careful consideration: when does it become unoccupied?
             db_booking.status = new_status
         elif (
             db_booking.tenant_id == user_id
@@ -209,12 +170,10 @@ class BookingService:
             and new_status == BookingStatus.CANCELLED_BY_TENANT
         ):
             db_booking.status = new_status
-        # Add more status transition logic as needed...
         else:
-            # Invalid status transition or permission denied
-            return None  # Or raise an error
+            return None
 
-        db_booking.updated_at = datetime.utcnow()
+        db_booking.updated_at = datetime.now()
         db.commit()
         db.refresh(db_booking)
         return db_booking

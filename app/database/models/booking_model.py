@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from database.init import Base
-from enums.booking_status import BookingStatus  # Import the enum
+from enums.booking_status import BookingStatus
 
 
 class Booking(Base):
@@ -28,8 +28,3 @@ class Booking(Base):
     property = relationship("Property")
     floor = relationship("Floor")
     unit = relationship("Unit")
-
-    # Add back_populates if you intend to have these relationships accessible
-    # from the other side (e.g., user.bookings, property.bookings)
-    # Example for Property (assuming Property model has a 'bookings' relationship defined):
-    # property = relationship("Property", back_populates="bookings")

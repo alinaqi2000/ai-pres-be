@@ -5,17 +5,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-# Create SQLAlchemy engine
 engine = create_engine(DATABASE_URL)
 
-# Create sessionmaker
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create Base for models
 Base = declarative_base()
 
 
-# Database dependency
 def get_db():
     db = SessionLocal()
     try:

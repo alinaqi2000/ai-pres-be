@@ -8,8 +8,10 @@ class PropertyImageBase(BaseModel):
     image_path: str
     is_thumbnail: bool = False
 
+
 class PropertyImageCreate(PropertyImageBase):
     pass
+
 
 class PropertyImage(PropertyImageBase):
     id: int
@@ -18,16 +20,17 @@ class PropertyImage(PropertyImageBase):
 
     class Config:
         from_attributes = True
-        model_config = {
-            "from_attributes": True
-        }
+        model_config = {"from_attributes": True}
+
 
 class UnitImageBase(BaseModel):
     unit_id: int
     image_path: str
 
+
 class UnitImageCreate(UnitImageBase):
     pass
+
 
 class UnitImage(UnitImageBase):
     id: int
@@ -36,6 +39,4 @@ class UnitImage(UnitImageBase):
 
     class Config:
         from_attributes = True
-        model_config = {
-            "from_attributes": True
-        }
+        model_config = {"from_attributes": True}

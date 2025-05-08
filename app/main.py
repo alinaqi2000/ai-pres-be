@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-import json
 from datetime import datetime
 from typing import Any
 import os
@@ -26,19 +25,15 @@ def custom_json_encoder(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
-# Create tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Pres API")
 
-# Create uploads directory if it doesn't exist
 uploads_dir = os.path.join(os.getcwd(), UPLOAD_DIR)
 os.makedirs(uploads_dir, exist_ok=True)
 
-# Mount static files
 app.mount(f"/{UPLOAD_DIR}", StaticFiles(directory=uploads_dir), name=UPLOAD_DIR)
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
