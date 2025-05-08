@@ -3,6 +3,7 @@ from .role_model import Role
 from .property_model import Property, Floor, Unit
 from .image_model import PropertyImage, UnitImage
 from .tenant_request_model import TenantRequest
-from .booking_model import Booking # New booking model
+from .booking_model import Booking
+from .invoice_model import Invoice
 
-__all__ = ["User", "Role", "Property", "Floor", "Unit", "PropertyImage", "UnitImage", "TenantRequest", "Booking"]
+__all__ = ["User", "Role", "Property", "Floor", "Unit", "PropertyImage", "UnitImage", "TenantRequest", "Booking", "Invoice"]    

@@ -16,6 +16,7 @@ from routes import (
     image_routes,
     tenant_request_routes,
     booking_routes,
+    invoice_routes,
 )
 
 
@@ -42,14 +43,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(auth_routes.router)
 app.include_router(role_routes.router)
 app.include_router(property_routes.router)
 app.include_router(image_routes.router)
 app.include_router(tenant_request_routes.router)
 app.include_router(booking_routes.router)
-
+app.include_router(invoice_routes.router)
 
 @app.get("/")
 def read_root():
