@@ -1,34 +1,32 @@
-from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional
+from pydantic import BaseModel, ConfigDict
+from typing import List, Optional
 from datetime import datetime
 from enums.invoice_status import InvoiceStatus
+from .invoice_line_item_schema import InvoiceLineItemCreate, InvoiceLineItemOut
 
 
 class InvoiceBase(BaseModel):
     booking_id: int
-    amount: int
+    amount: Optional[float] = None
     due_date: datetime
     status: InvoiceStatus
 
-    @field_validator("status", mode="before")
-    @classmethod
-    def validate_status(cls, value: str) -> InvoiceStatus:
-        if isinstance(value, str):
-            return InvoiceStatus(value)
-        return value
-
 
 class InvoiceCreate(InvoiceBase):
-    pass
+    line_items: List[InvoiceLineItemCreate]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class InvoiceUpdate(InvoiceBase):
-    pass
+class InvoiceUpdate(BaseModel):
+    due_date: Optional[datetime] = None
+    status: Optional[InvoiceStatus] = None
 
 
-class InvoiceOut(InvoiceBase):
+class InvoiceMinimumResponse(BaseModel):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime]
+    status: InvoiceStatus
+    amount: Optional[float] = None
+    due_date: datetime
 
     model_config = ConfigDict(from_attributes=True)

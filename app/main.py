@@ -17,6 +17,7 @@ from routes import (
     tenant_request_routes,
     booking_routes,
     invoice_routes,
+    payment_routes,
 )
 
 
@@ -50,6 +51,7 @@ app.include_router(image_routes.router)
 app.include_router(tenant_request_routes.router)
 app.include_router(booking_routes.router)
 app.include_router(invoice_routes.router)
+app.include_router(payment_routes.router)
 
 @app.get("/")
 def read_root():

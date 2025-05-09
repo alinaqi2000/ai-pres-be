@@ -6,9 +6,9 @@ import traceback
 from schemas.booking_schema import (
     BookingCreate,
     BookingUpdate,
-    BookingOut,
     BookingStatusUpdate,
 )
+from schemas.booking_response import BookingOut
 from services.booking_service import BookingService
 from database.models.user_model import User
 from database.models.property_model import Property
@@ -24,8 +24,13 @@ from responses.error import (
 )
 from enums.booking_status import BookingStatus
 
+from services.tenant_request_service import TenantRequestService
+from database.models.tenant_request_model import TenantRequest
+
+
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 booking_service = BookingService()
+tenant_request_service = TenantRequestService()
 
 
 @router.post("/create_booking", response_model=BookingOut)
@@ -37,10 +42,59 @@ def create_bookings(
     if not isinstance(current_user, User):
         return current_user
     try:
-        property = (
+        tenant_request_id_to_use = booking_in.tenant_request_id
+
+        if tenant_request_id_to_use is None:
+            matching_requests = (
+                db.query(TenantRequest)
+                .filter(
+                    TenantRequest.tenant_id == current_user.id,
+                    TenantRequest.property_id == booking_in.property_id,
+                    TenantRequest.floor_id == booking_in.floor_id,
+                    TenantRequest.unit_id == booking_in.unit_id,
+                    TenantRequest.status == "accepted",
+                )
+                .all()
+            )
+            if not matching_requests:
+                return conflict_error(
+                    "No matching 'accepted' tenant request found for the provided details. Please create or specify a tenant request."
+                )
+            if len(matching_requests) > 1:
+                return conflict_error(
+                    "Multiple 'accepted' tenant requests match these details. Please specify 'tenant_request_id'."
+                )
+            tenant_request_id_to_use = matching_requests[0].id
+
+        tenant_request = tenant_request_service.get(db, tenant_request_id_to_use)
+        if not tenant_request:
+            return not_found_error(
+                f"Tenant request with ID {tenant_request_id_to_use} not found."
+            )
+
+        if tenant_request.tenant_id != current_user.id:
+            return forbidden_error(
+                "Not authorized to create a booking for this tenant request."
+            )
+
+        if tenant_request.status != "accepted":
+            return conflict_error(
+                f"Tenant request {tenant_request_id_to_use} has not been accepted by the owner. Current status: {tenant_request.status}"
+            )
+
+        if not (
+            tenant_request.property_id == booking_in.property_id
+            and tenant_request.floor_id == booking_in.floor_id
+            and tenant_request.unit_id == booking_in.unit_id
+        ):
+            return conflict_error(
+                "Booking details (property, floor, unit) do not match the specified tenant request."
+            )
+
+        property_obj = (
             db.query(Property).filter(Property.id == booking_in.property_id).first()
         )
-        if not property:
+        if not property_obj:
             return not_found_error(
                 f"Property with ID {booking_in.property_id} not found."
             )
@@ -51,7 +105,9 @@ def create_bookings(
         if not unit:
             return not_found_error(f"Unit with ID {booking_in.unit_id} not found.")
 
-        created_booking = booking_service.create(db, booking_in, current_user.id)
+        created_booking = booking_service.create(
+            db, booking_in, current_user.id, tenant_request_id_to_use
+        )
         if not created_booking:
             return conflict_error(
                 "Could not create booking. Unit might be unavailable or request invalid."
@@ -61,6 +117,37 @@ def create_bookings(
         )
     except ValueError as ve:
         return conflict_error(str(ve))
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+
+@router.get("/properties/{property_id}/bookings/", response_model=List[BookingOut])
+def get_bookings_for_property(
+    property_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+    property_obj = db.query(Property).filter(Property.id == property_id).first()
+    if not property_obj:
+        return not_found_error(f"Property with ID {property_id} not found.")
+
+    if property_obj.owner_id != current_user.id:
+        return forbidden_error(
+            "You are not authorized to view bookings for this property."
+        )
+
+    try:
+        bookings = booking_service.get_by_property(
+            db, property_id=property_id, skip=skip, limit=limit
+        )
+        return data_response(
+            [BookingOut.model_validate(b).model_dump(mode="json") for b in bookings]
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -227,9 +314,7 @@ def delete_booking(
     if not isinstance(current_user, User):
         return current_user
     try:
-        db_booking = booking_service.get(
-            db, booking_id
-        )  # Get booking to check ownership/status
+        db_booking = booking_service.get(db, booking_id)
         if not db_booking:
             return not_found_error(f"Booking with ID {booking_id} not found.")
 
@@ -238,7 +323,6 @@ def delete_booking(
 
         success = booking_service.delete(db, booking_id, current_user.id, is_owner)
         if not success:
-            # This could be due to not found (already handled) or permission issues based on service logic
             return forbidden_error(
                 "Not authorized to delete this booking or deletion not allowed at current stage."
             )

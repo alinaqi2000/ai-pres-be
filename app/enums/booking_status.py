@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class BookingStatus(str, Enum):
+    PENDING_PAYMENT = "pending_payment" # If you have a specific state before payment
+    PAYMENT_FAILED = "payment_failed"
     PENDING = "pending"  # Pending confirmation or payment
     CONFIRMED = "confirmed"  # Booking confirmed, unit reserved
     ACTIVE = "active"  # Tenant has moved in / booking period is active

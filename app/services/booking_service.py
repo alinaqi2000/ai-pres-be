@@ -38,6 +38,18 @@ class BookingService:
             .all()
         )
 
+    def get_by_property(
+        self, db: Session, property_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Booking]:
+        return (
+            db.query(Booking)
+            .join(Booking.unit)
+            .filter(Unit.property_id == property_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
     def get_by_unit(
         self, db: Session, unit_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
@@ -71,21 +83,29 @@ class BookingService:
         return conflicting_booking is None
 
     def create(
-        self, db: Session, booking_in: BookingCreate, tenant_id: int
+        self,
+        db: Session,
+        booking_in: BookingCreate,
+        tenant_id: int,
+        tenant_request_id: int,
     ) -> Optional[Booking]:
         unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
         if not unit:
             return None
-        if unit.is_occupied:
-            return None
 
         if not self.is_unit_available(
-            db, booking_in.unit_id, booking_in.start_date, booking_in.end_date
+            db,
+            booking_in.unit_id,
+            booking_in.start_date,
+            booking_in.end_date,
         ):
             return None
 
         db_booking = Booking(
-            **booking_in.model_dump(), tenant_id=tenant_id, status=BookingStatus.PENDING
+            **booking_in.model_dump(exclude_none=True, exclude={"tenant_request_id"}),
+            tenant_id=tenant_id,
+            tenant_request_id=tenant_request_id,
+            status=BookingStatus.PENDING,
         )
         db.add(db_booking)
         db.commit()
@@ -97,7 +117,6 @@ class BookingService:
     ) -> Optional[Booking]:
         update_data = booking_in.model_dump(exclude_unset=True)
 
-        # If dates are being changed, check for availability
         new_start_date = update_data.get("start_date", db_booking.start_date)
         new_end_date = update_data.get("end_date", db_booking.end_date)
 
@@ -158,19 +177,43 @@ class BookingService:
         if not db_booking:
             return None
 
-        if (
-            is_owner
-            and db_booking.status == BookingStatus.PENDING
-            and new_status == BookingStatus.CONFIRMED
-        ):
-            db_booking.status = new_status
-        elif (
-            db_booking.tenant_id == user_id
-            and db_booking.status == BookingStatus.PENDING
-            and new_status == BookingStatus.CANCELLED_BY_TENANT
-        ):
-            db_booking.status = new_status
-        else:
+        valid_transition = False
+        if db_booking.status == BookingStatus.PENDING:
+            if is_owner:
+                if new_status == BookingStatus.CONFIRMED:
+                    db_booking.status = new_status
+                    valid_transition = True
+                elif new_status == BookingStatus.REJECTED:
+                    db_booking.status = new_status
+                    valid_transition = True
+            elif db_booking.tenant_id == user_id:
+                if new_status == BookingStatus.CANCELLED_BY_TENANT:
+                    db_booking.status = new_status
+                    valid_transition = True
+
+        elif db_booking.status == BookingStatus.CONFIRMED:
+            if is_owner:
+                if new_status == BookingStatus.ACTIVE:
+                    db_booking.status = new_status
+                    valid_transition = True
+                elif new_status == BookingStatus.CANCELLED_BY_OWNER:
+                    db_booking.status = new_status
+                    valid_transition = True
+            elif db_booking.tenant_id == user_id:
+                if new_status == BookingStatus.CANCELLED_BY_TENANT:
+                    db_booking.status = new_status
+                    valid_transition = True
+
+        elif db_booking.status == BookingStatus.ACTIVE:
+            if is_owner:
+                if new_status == BookingStatus.COMPLETED:
+                    db_booking.status = new_status
+                    valid_transition = True
+                elif new_status == BookingStatus.CANCELLED_BY_OWNER:
+                    db_booking.status = new_status
+                    valid_transition = True
+
+        if not valid_transition:
             return None
 
         db_booking.updated_at = datetime.now()

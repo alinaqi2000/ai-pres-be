@@ -28,15 +28,10 @@ class TenantRequestUpdate(BaseModel):
     is_seen: Optional[bool] = None
 
 
-class TenantRequestOut(TenantRequestBase):
-    id: int
-    tenant: UserMinimumResponse
+class TenantRequestMinimumResponse(BaseModel):
     property: PropertyMinimumResponse
     floor: FloorMinimumResponse
     unit: UnitMinimumResponse
-    status: str
-    is_seen: bool
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    monthly_offer: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)

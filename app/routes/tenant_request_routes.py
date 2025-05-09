@@ -8,8 +8,8 @@ from database.models.user_model import User
 from schemas.tenant_request_schema import (
     TenantRequestCreate,
     TenantRequestUpdate,
-    TenantRequestOut,
 )
+from schemas.booking_response import TenantRequestOut
 from services.tenant_request_service import TenantRequestService
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response

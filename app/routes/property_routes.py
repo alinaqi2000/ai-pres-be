@@ -32,8 +32,6 @@ property_service = PropertyService()
 floor_service = FloorService()
 unit_service = UnitService()
 
-# Property Routes
-
 
 @router.patch("/{property_id}/publish", response_model=PropertyResponse)
 async def update_property_publish_status(

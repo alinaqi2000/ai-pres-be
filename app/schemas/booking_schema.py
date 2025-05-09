@@ -1,7 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 from enums.booking_status import BookingStatus
+from .property_response import PropertyMinimumResponse
+from .property_response import FloorMinimumResponse
+from .property_response import UnitMinimumResponse
 
 
 class BookingBase(BaseModel):
@@ -15,7 +18,7 @@ class BookingBase(BaseModel):
 
 
 class BookingCreate(BookingBase):
-    pass
+    tenant_request_id: Optional[int] = None
 
 
 class BookingUpdate(BaseModel):
@@ -26,16 +29,13 @@ class BookingUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class BookingOut(BookingBase):
-    id: int
-    tenant_id: int
-    status: BookingStatus
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
 class BookingStatusUpdate(BaseModel):
     status: BookingStatus = str
+    
+class BookingMinimumResponse(BaseModel):
+    id: int
+    property: PropertyMinimumResponse
+    floor: FloorMinimumResponse
+    unit: UnitMinimumResponse
+    
+    model_config = ConfigDict(from_attributes=True)
