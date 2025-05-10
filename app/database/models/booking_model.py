@@ -22,8 +22,8 @@ class Booking(Base):
     status = Column(String(50), default=BookingStatus.PENDING.value, nullable=False)
     notes = Column(Text, nullable=True)  # Optional notes from tenant or owner
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, onupdate=datetime.utcnow, nullable=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, onupdate=datetime.now(timezone.utc), nullable=True)
 
     tenant = relationship("User")
     property = relationship("Property")
