@@ -8,7 +8,7 @@ def success_response(message: str = None, data=None):
 
 
 def data_response(data=None):
-    return build_response(200, data=data)
+    return build_response(200, status='success', data=data)
 
 
 def empty_response():

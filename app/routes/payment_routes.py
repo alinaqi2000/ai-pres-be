@@ -8,7 +8,7 @@ from database.models.property_model import Property
 from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
-from schemas.booking_response import PaymentOut
+from schemas.booking_response import PaymentResponse
 from services.payment_service import PaymentService
 from utils.dependencies import get_current_user
 from responses.success import data_response
@@ -24,12 +24,11 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 payment_service = PaymentService()
 
 
-@router.post("/create_payment", response_model=PaymentOut)
+@router.post("/create_payment", response_model=PaymentResponse)
 def create_payment(
     payment_in: PaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+    current_user = Depends(get_current_user),):
     if not isinstance(current_user, User):
         return current_user
     try:
@@ -37,7 +36,7 @@ def create_payment(
             db, payment_in, current_user.id
         )
         return data_response(
-            PaymentOut.model_validate(created_payment).model_dump(mode="json")
+            PaymentResponse.model_validate(created_payment).model_dump(mode="json")
         )
     except ValueError as ve:
         return conflict_error(str(ve))
@@ -46,12 +45,11 @@ def create_payment(
         return internal_server_error(str(e))
 
 
-@router.get("/{payment_id}", response_model=PaymentOut)
+@router.get("/{payment_id}", response_model=PaymentResponse)
 def get_payment(
     payment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+    current_user = Depends(get_current_user),):
     if not isinstance(current_user, User):
         return current_user
     try:
@@ -76,19 +74,18 @@ def get_payment(
         if not (is_tenant or is_owner):
             return forbidden_error("Not authorized to view this payment.")
 
-        return data_response(PaymentOut.model_validate(payment).model_dump(mode="json"))
+        return data_response(PaymentResponse.model_validate(payment).model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.patch("/{payment_id}", response_model=PaymentOut)
+@router.patch("/{payment_id}", response_model=PaymentResponse)
 def update_payment(
     payment_id: int,
     payment_update: PaymentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+    current_user = Depends(get_current_user),):
     if not isinstance(current_user, User):
         return current_user
     try:
@@ -111,7 +108,7 @@ def update_payment(
                 f"Payment with ID {payment_id} update failed."
             )
         return data_response(
-            PaymentOut.model_validate(updated_payment).model_dump(mode="json")
+            PaymentResponse.model_validate(updated_payment).model_dump(mode="json")
         )
     except ValueError as ve:
         return conflict_error(str(ve))
@@ -120,12 +117,11 @@ def update_payment(
         return internal_server_error(str(e))
 
 
-@router.get("/booking/{booking_id}", response_model=List[PaymentOut])
+@router.get("/booking/{booking_id}", response_model=List[PaymentResponse])
 def get_payments_for_booking_route(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    skip: int = 0,
+    current_user = Depends(get_current_user),    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
@@ -151,16 +147,15 @@ def get_payments_for_booking_route(
 
     payments = payment_service.get_payments_for_booking(db, booking_id, skip, limit)
     return data_response(
-        [PaymentOut.model_validate(p).model_dump(mode="json") for p in payments]
+        [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
     )
 
 
-@router.get("/invoice/{invoice_id}", response_model=List[PaymentOut])
+@router.get("/invoice/{invoice_id}", response_model=List[PaymentResponse])
 def get_payments_for_invoice_route(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    skip: int = 0,
+    current_user = Depends(get_current_user),    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
@@ -193,15 +188,14 @@ def get_payments_for_invoice_route(
 
     payments = payment_service.get_payments_for_invoice(db, invoice_id, skip, limit)
     return data_response(
-        [PaymentOut.model_validate(p).model_dump(mode="json") for p in payments]
+        [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
     )
 
 
-@router.get("/user/me", response_model=List[PaymentOut])
+@router.get("/user/me", response_model=List[PaymentResponse])
 def get_my_payments(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    skip: int = 0,
+    current_user = Depends(get_current_user),    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
@@ -209,7 +203,7 @@ def get_my_payments(
     try:
         payments = payment_service.get_payments_by_user(db, current_user.id, skip, limit)
         return data_response(
-            [PaymentOut.model_validate(p).model_dump(mode="json") for p in payments]
+            [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
         )
     except Exception as e:
         traceback.print_exc()

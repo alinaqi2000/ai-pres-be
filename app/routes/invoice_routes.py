@@ -5,7 +5,7 @@ import traceback
 
 from database.init import get_db
 from schemas.invoice_schema import InvoiceCreate, InvoiceUpdate
-from schemas.booking_response import InvoiceOut
+from schemas.booking_response import InvoiceResponse
 from services.invoice_service import InvoiceService
 from utils.dependencies import get_current_user
 from responses.error import not_found_error, internal_server_error
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 invoice_service = InvoiceService()
 
 
-@router.post("/create_invoice", response_model=InvoiceOut)
+@router.post("/create_invoice", response_model=InvoiceResponse)
 def create_invoice(
     invoice: InvoiceCreate,
     db: Session = Depends(get_db),
@@ -32,13 +32,12 @@ def create_invoice(
         return internal_server_error(str(e))
 
 
-@router.get("/my_invoices", response_model=List[InvoiceOut])
+@router.get("/my_invoices", response_model=List[InvoiceResponse])
 def read_invoices(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+    current_user = Depends(get_current_user),):
     if not isinstance(current_user, User):
         return current_user
     try:
@@ -46,14 +45,14 @@ def read_invoices(
             db, current_user=current_user, skip=skip, limit=limit
         )
         return data_response(
-            [InvoiceOut.model_validate(i).model_dump(mode="json") for i in invoices]
+            [InvoiceResponse.model_validate(i).model_dump(mode="json") for i in invoices]
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/{invoice_id}", response_model=InvoiceOut)
+@router.get("/{invoice_id}", response_model=InvoiceResponse)
 def read_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
@@ -67,7 +66,7 @@ def read_invoice(
     return db_invoice
 
 
-@router.patch("/{invoice_id}", response_model=InvoiceOut)
+@router.patch("/{invoice_id}", response_model=InvoiceResponse)
 def update_invoice(
     invoice_id: int,
     invoice: InvoiceUpdate,
@@ -99,7 +98,7 @@ def update_invoice(
         return internal_server_error(str(e))
 
 
-@router.delete("/{invoice_id}", response_model=InvoiceOut)
+@router.delete("/{invoice_id}", response_model=InvoiceResponse)
 def delete_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),

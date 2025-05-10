@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
-from database.init import Base
+from ..init import Base
 from enums.booking_status import BookingStatus
 
 
@@ -20,7 +20,7 @@ class Booking(Base):
     end_date = Column(DateTime, nullable=False)
     total_price = Column(Float, nullable=False)
     status = Column(String(50), default=BookingStatus.PENDING.value, nullable=False)
-    notes = Column(Text, nullable=True)  # Optional notes from tenant or owner
+    notes = Column(Text, nullable=True)  
 
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(DateTime, onupdate=datetime.now(timezone.utc), nullable=True)

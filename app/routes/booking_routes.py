@@ -8,7 +8,7 @@ from schemas.booking_schema import (
     BookingUpdate,
     BookingStatusUpdate,
 )
-from schemas.booking_response import BookingOut
+from schemas.booking_response import BookingResponse
 from services.booking_service import BookingService
 from database.models.user_model import User
 from database.models.property_model import Property
@@ -33,87 +33,75 @@ booking_service = BookingService()
 tenant_request_service = TenantRequestService()
 
 
-@router.post("/create_booking", response_model=BookingOut)
+@router.post("/create_booking", response_model=BookingResponse)
 def create_bookings(
     booking_in: BookingCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
     try:
-        tenant_request_id_to_use = booking_in.tenant_request_id
-
-        if tenant_request_id_to_use is None:
-            matching_requests = (
-                db.query(TenantRequest)
-                .filter(
-                    TenantRequest.tenant_id == current_user.id,
-                    TenantRequest.property_id == booking_in.property_id,
-                    TenantRequest.floor_id == booking_in.floor_id,
-                    TenantRequest.unit_id == booking_in.unit_id,
-                    TenantRequest.status == "accepted",
-                )
-                .all()
-            )
-            if not matching_requests:
-                return conflict_error(
-                    "No matching 'accepted' tenant request found for the provided details. Please create or specify a tenant request."
-                )
-            if len(matching_requests) > 1:
-                return conflict_error(
-                    "Multiple 'accepted' tenant requests match these details. Please specify 'tenant_request_id'."
-                )
-            tenant_request_id_to_use = matching_requests[0].id
-
-        tenant_request = tenant_request_service.get(db, tenant_request_id_to_use)
-        if not tenant_request:
-            return not_found_error(
-                f"Tenant request with ID {tenant_request_id_to_use} not found."
-            )
-
-        if tenant_request.tenant_id != current_user.id:
-            return forbidden_error(
-                "Not authorized to create a booking for this tenant request."
-            )
-
-        if tenant_request.status != "accepted":
-            return conflict_error(
-                f"Tenant request {tenant_request_id_to_use} has not been accepted by the owner. Current status: {tenant_request.status}"
-            )
-
-        if not (
-            tenant_request.property_id == booking_in.property_id
-            and tenant_request.floor_id == booking_in.floor_id
-            and tenant_request.unit_id == booking_in.unit_id
-        ):
-            return conflict_error(
-                "Booking details (property, floor, unit) do not match the specified tenant request."
-            )
-
-        property_obj = (
-            db.query(Property).filter(Property.id == booking_in.property_id).first()
-        )
-        if not property_obj:
-            return not_found_error(
-                f"Property with ID {booking_in.property_id} not found."
-            )
-        floor = db.query(Floor).filter(Floor.id == booking_in.floor_id).first()
-        if not floor:
-            return not_found_error(f"Floor with ID {booking_in.floor_id} not found.")
         unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
         if not unit:
             return not_found_error(f"Unit with ID {booking_in.unit_id} not found.")
 
+        floor = db.query(Floor).filter(Floor.id == unit.floor_id).first()
+        if not floor:
+            return not_found_error(f"Floor for unit {booking_in.unit_id} not found.")
+
+        property_obj = (
+            db.query(Property).filter(Property.id == floor.property_id).first()
+        )
+        if not property_obj:
+            return not_found_error(f"Property for floor {floor.id} not found.")
+
+        booking_in.property_id = property_obj.id
+        booking_in.floor_id = floor.id
+
+        tenant_request = (
+            db.query(TenantRequest)
+            .filter(
+                TenantRequest.tenant_id == current_user.id,
+                TenantRequest.unit_id == booking_in.unit_id,
+                TenantRequest.status == "accepted",
+            )
+            .order_by(TenantRequest.created_at.desc())
+            .first()
+        )
+        if tenant_request is None and booking_in.tenant_request_id is None:
+            return conflict_error(
+                "No recent accepted tenant request found for this unit. Please specify a tenant request."
+            )
+
+        if booking_in.tenant_request_id is not None:
+            tenant_request = tenant_request_service.get(
+                db, booking_in.tenant_request_id
+            )
+            if not tenant_request:
+                return not_found_error(
+                    f"Tenant request with ID {booking_in.tenant_request_id} not found."
+                )
+
+            if tenant_request.tenant_id != current_user.id:
+                return forbidden_error(
+                    "Not authorized to create a booking for this tenant request."
+                )
+
+            if tenant_request.status != "accepted":
+                return conflict_error(
+                    f"Tenant request {booking_in.tenant_request_id} has not been accepted by the owner. Current status: {tenant_request.status}"
+                )
+
         created_booking = booking_service.create(
-            db, booking_in, current_user.id, tenant_request_id_to_use
+            db, booking_in, current_user.id, tenant_request.id
         )
         if not created_booking:
             return conflict_error(
                 "Could not create booking. Unit might be unavailable or request invalid."
             )
         return data_response(
-            BookingOut.model_validate(created_booking).model_dump(mode="json")
+            BookingResponse.model_validate(created_booking).model_dump(mode="json")
         )
     except ValueError as ve:
         return conflict_error(str(ve))
@@ -122,13 +110,13 @@ def create_bookings(
         return internal_server_error(str(e))
 
 
-@router.get("/properties/{property_id}/bookings/", response_model=List[BookingOut])
+@router.get("/properties/{property_id}/bookings/", response_model=List[BookingResponse])
 def get_bookings_for_property(
     property_id: int,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -146,38 +134,44 @@ def get_bookings_for_property(
             db, property_id=property_id, skip=skip, limit=limit
         )
         return data_response(
-            [BookingOut.model_validate(b).model_dump(mode="json") for b in bookings]
+            [
+                BookingResponse.model_validate(b).model_dump(mode="json")
+                for b in bookings
+            ]
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/my_bookings", response_model=List[BookingOut])
+@router.get("/my_bookings", response_model=List[BookingResponse])
 def get_my_bookings(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
     try:
         bookings = booking_service.get_by_tenant(db, current_user.id, skip, limit)
         return data_response(
-            [BookingOut.model_validate(b).model_dump(mode="json") for b in bookings]
+            [
+                BookingResponse.model_validate(b).model_dump(mode="json")
+                for b in bookings
+            ]
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/property_owner", response_model=List[BookingOut])
+@router.get("/property_owner", response_model=List[BookingResponse])
 def get_bookings_for_my_properties(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -186,18 +180,21 @@ def get_bookings_for_my_properties(
             db, current_user.id, skip, limit
         )
         return data_response(
-            [BookingOut.model_validate(b).model_dump(mode="json") for b in bookings]
+            [
+                BookingResponse.model_validate(b).model_dump(mode="json")
+                for b in bookings
+            ]
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/{booking_id}", response_model=BookingOut)
+@router.get("/{booking_id}", response_model=BookingResponse)
 def get_booking(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -213,18 +210,20 @@ def get_booking(
         ):
             return forbidden_error("Not authorized to view this booking.")
 
-        return data_response(BookingOut.model_validate(booking).model_dump(mode="json"))
+        return data_response(
+            BookingResponse.model_validate(booking).model_dump(mode="json")
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.patch("/{booking_id}", response_model=BookingOut)
+@router.patch("/{booking_id}", response_model=BookingResponse)
 def update_booking(
     booking_id: int,
     booking_in: BookingUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -264,7 +263,7 @@ def update_booking(
                 "Could not update booking. Unit might be unavailable for new dates or update invalid."
             )
         return data_response(
-            BookingOut.model_validate(updated_booking).model_dump(mode="json")
+            BookingResponse.model_validate(updated_booking).model_dump(mode="json")
         )
     except ValueError as ve:
         return conflict_error(str(ve))
@@ -273,12 +272,12 @@ def update_booking(
         return internal_server_error(str(e))
 
 
-@router.patch("/{booking_id}/status", response_model=BookingOut)
+@router.patch("/{booking_id}/status", response_model=BookingResponse)
 def update_booking_status(
     booking_id: int,
     status_update: BookingStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -298,7 +297,7 @@ def update_booking_status(
                 "Not authorized to change status or invalid status transition."
             )
         return data_response(
-            BookingOut.model_validate(updated_booking).model_dump(mode="json")
+            BookingResponse.model_validate(updated_booking).model_dump(mode="json")
         )
     except Exception as e:
         traceback.print_exc()
@@ -309,7 +308,7 @@ def update_booking_status(
 def delete_booking(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user

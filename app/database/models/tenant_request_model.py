@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from database.init import Base
-from sqlalchemy.sql import func
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TenantRequest(Base):
@@ -17,8 +16,8 @@ class TenantRequest(Base):
     message = Column(Text, nullable=True)
     status = Column(String(50), default="pending")
     is_seen = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), onupdate=datetime.now(timezone.utc), nullable=True)
 
     preferred_move_in = Column(DateTime, nullable=True)
     monthly_offer = Column(Integer, nullable=True)

@@ -31,7 +31,7 @@ class UnitService(BaseService):
         query = (
             db.query(self.model)
             .filter(self.model.floor_id == floor_id)
-            .filter(self.model.is_occupied == True)
+            .filter(self.model.is_occupied == False)
         )
         return query.offset(skip).limit(limit).all()
 

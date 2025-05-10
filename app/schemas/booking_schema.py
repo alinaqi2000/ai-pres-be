@@ -8,8 +8,8 @@ from .property_response import UnitMinimumResponse
 
 
 class BookingBase(BaseModel):
-    property_id: int
-    floor_id: int
+    property_id: Optional[int] = None
+    floor_id: Optional[int] = None
     unit_id: int
     start_date: datetime
     end_date: datetime
