@@ -10,7 +10,7 @@ class InvoiceLineItemCreate(InvoiceLineItemBase):
     pass
 
 
-class InvoiceLineItemOut(InvoiceLineItemBase):
+class InvoiceLineItemResponse(InvoiceLineItemBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True)

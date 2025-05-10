@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from enums.unit_type import UnitType
+from enums.property_type import PropertyType
 
 
 class UnitBase(BaseModel):
@@ -52,6 +53,7 @@ class Floor(FloorBase):
 class PropertyBase(BaseModel):
     name: str
     city: str
+    property_type: PropertyType
     address: str
     description: Optional[str] = None
     total_area: Optional[float] = None

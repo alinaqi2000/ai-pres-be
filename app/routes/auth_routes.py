@@ -9,7 +9,7 @@ from typing import List, Union
 from schemas.auth_schema import (
     LoginRequest,
     UserCreate,
-    UserOut,
+    UserResponse,
     UserUpdate,
     PasswordUpdate,
     ResponseModel,
@@ -32,7 +32,7 @@ from services.auth_service import (
 )
 from services.email_service import EmailService
 
-from responses.success import success_response
+from responses.success import data_response, empty_response
 from responses.error import (
     unauthorized_error,
     conflict_error,
@@ -55,9 +55,7 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
     try:
         user = create_user(payload, db)
         token = create_access_token({"sub": user.email})
-        return success_response(
-            "Registration successful", {"access_token": token, "token_type": "bearer"}
-        )
+        return data_response({"access_token": token, "token_type": "bearer"})
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to register user", str(e))
@@ -71,15 +69,14 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
             return unauthorized_error("Invalid credentials")
 
         token = create_access_token({"sub": user.email})
-        return success_response(
-            "Login successful", {"access_token": token, "token_type": "bearer"}
-        )
+        return data_response({"access_token": token, "token_type": "bearer"})
+
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/get_all", response_model=List[UserOut])
+@router.get("/get_all", response_model=List[UserResponse])
 def get_all_users_endpoint(
     db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
@@ -90,7 +87,7 @@ def get_all_users_endpoint(
         return internal_server_error("Failed to retrieve users", str(e))
 
 
-@router.get("/user/{user_id}", response_model=Union[UserOut, ResponseModel])
+@router.get("/user/{user_id}", response_model=Union[UserResponse, ResponseModel])
 def get_user(
     user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
@@ -98,7 +95,7 @@ def get_user(
         user = get_user_by_id(user_id, db)
         if not user:
             return not_found_error(f"No user found with id {user_id}")
-        return user
+        return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to fetch user", str(e))
@@ -116,7 +113,7 @@ def delete_user_by_id(
         if user:
             db.delete(user)
             db.commit()
-        return success_response(message=f"User with id {user_id} deleted successfully")
+        return empty_response()
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to delete user", str(e))
@@ -133,8 +130,7 @@ def update_user_route(
         user = update_user(user_id, payload, db)
         if not user:
             return not_found_error(f"No user found with id {user_id}")
-        return success_response(
-            "User updated successfully",
+        return data_response(
             {
                 "name": payload.name,
                 "email": payload.email,
@@ -163,8 +159,7 @@ async def reset_password(email: str, db: Session = Depends(get_db)):
         # Send the new password to user's email
         await email_service.send_new_password_email(email, new_password)
 
-        return success_response(
-            "Password reset successfully",
+        return data_response(
             {"message": "Check your email for the new password"},
         )
     except Exception as e:
@@ -189,8 +184,8 @@ async def update_password(
         db.commit()
         db.refresh(current_user)
 
-        return success_response(
-            "Password updated successfully", {"message": "Password has been updated"}
+        return data_response(
+            {"message": "Password has been updated"}
         )
     except Exception as e:
         traceback.print_exc()
@@ -205,7 +200,7 @@ def delete_user_by_id(
         deleted_user = delete_user(user_id, db)
         if not deleted_user:
             return not_found_error(f"No user found with id {user_id}")
-        return success_response(message=f"User with id {user_id} deleted successfully")
+        return empty_response()
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to delete user", str(e))

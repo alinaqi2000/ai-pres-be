@@ -45,6 +45,32 @@ class TenantRequestService:
             .all()
         )
 
+    def check_existing_request(
+        self, db: Session, tenant_id: int, request: TenantRequestCreate
+    ) -> Optional[TenantRequest]:
+        return (
+            db.query(TenantRequest)
+            .filter(
+                TenantRequest.tenant_id == tenant_id,
+                (
+                    (TenantRequest.property_id == request.property_id) &
+                    (TenantRequest.floor_id == request.floor_id) &
+                    (TenantRequest.unit_id == request.unit_id)
+                ) |
+                (
+                    (TenantRequest.property_id == request.property_id) &
+                    (TenantRequest.floor_id == request.floor_id) &
+                    (TenantRequest.unit_id.is_(None))
+                ) |
+                (
+                    (TenantRequest.property_id == request.property_id) &
+                    (TenantRequest.floor_id.is_(None)) &
+                    (TenantRequest.unit_id.is_(None))
+                )
+            )
+            .first()
+        )
+
     def update(
         self, db: Session, db_obj: TenantRequest, obj_in: TenantRequestUpdate
     ) -> TenantRequest:

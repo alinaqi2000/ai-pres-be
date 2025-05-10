@@ -31,7 +31,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
 
 
-class UserOut(BaseModel):
+class UserResponse(BaseModel):
     id: int
     name: str
     email: str
@@ -51,6 +51,7 @@ class ResponseModel(BaseModel):
     error: Optional[dict] = None
 
 class UserMinimumResponse(BaseModel):
+    id: int
     name: str
     email: EmailStr
     city: str

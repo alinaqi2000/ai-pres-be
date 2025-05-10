@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 from enums.invoice_status import InvoiceStatus
-from .invoice_line_item_schema import InvoiceLineItemCreate, InvoiceLineItemOut
+from .invoice_line_item_schema import InvoiceLineItemCreate, InvoiceLineItemResponse
 
 
 class InvoiceBase(BaseModel):

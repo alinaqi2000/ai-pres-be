@@ -9,7 +9,7 @@ from schemas.tenant_request_schema import (
     TenantRequestCreate,
     TenantRequestUpdate,
 )
-from schemas.booking_response import TenantRequestOut
+from schemas.tenant_request_response import TenantRequestResponse
 from services.tenant_request_service import TenantRequestService
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/tenant_requests", tags=["Tenant Requests"])
 tenant_request_service = TenantRequestService()
 
 
-@router.post("/create_request", response_model=TenantRequestOut)
+@router.post("/create_request", response_model=TenantRequestResponse)
 async def create_request(
     request: TenantRequestCreate,
     db: Session = Depends(get_db),
@@ -36,13 +36,12 @@ async def create_request(
         return current_user
 
     try:
-        existing = (
-            db.query(TenantRequest)
-            .filter_by(tenant_id=current_user.id, unit_id=request.unit_id)
-            .first()
+        # Check for existing requests
+        existing = tenant_request_service.check_existing_request(
+            db, current_user.id, request
         )
         if existing:
-            return conflict_error("Tenant has already made a request for this unit.")
+            return conflict_error("Tenant has already made a request for this property.")
 
         property_exists = db.query(Property).filter_by(id=request.property_id).first()
         if not property_exists:
@@ -50,27 +49,31 @@ async def create_request(
                 f"Property with id {request.property_id} does not exist"
             )
 
-        floor_exists = db.query(Floor).filter_by(id=request.floor_id).first()
-        if not floor_exists:
-            return not_found_error(f"Floor with id {request.floor_id} does not exist")
+        if isinstance(property_exists, Property) and property_exists.owner_id == current_user.id:
+            return forbidden_error("Not authorized to make a request for this property")
 
-        unit_exists = (
-            db.query(Unit).filter_by(id=request.unit_id, is_occupied=False).first()
-        )
-        if not unit_exists:
-            return not_found_error(f"Unit with id {request.unit_id} is not available")
+        if request.floor_id:
+            floor_exists = db.query(Floor).filter_by(id=request.floor_id).first()
+            if not floor_exists:
+                return not_found_error(f"Floor with id {request.floor_id} does not exist")
+
+        if request.unit_id:
+            unit_exists = db.query(Unit).filter_by(id=request.unit_id, is_occupied=False).first()
+            if not unit_exists:
+                return not_found_error(f"Unit with id {request.unit_id} is not available")
 
         request.tenant_id = current_user.id
+        request.owner_id = property_exists.owner_id
         created = tenant_request_service.create(db, request)
         return data_response(
-            TenantRequestOut.model_validate(created).model_dump(mode="json")
+            TenantRequestResponse.model_validate(created).model_dump(mode="json")
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/all_requests", response_model=List[TenantRequestOut])
+@router.get("/all_requests", response_model=List[TenantRequestResponse])
 async def list_all_requests(
     skip: int = 0,
     limit: int = 100,
@@ -84,7 +87,7 @@ async def list_all_requests(
         requests = tenant_request_service.get_all(db, skip, limit)
         return data_response(
             [
-                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                TenantRequestResponse.model_validate(r).model_dump(mode="json")
                 for r in requests
             ]
         )
@@ -93,7 +96,7 @@ async def list_all_requests(
         return internal_server_error(str(e))
 
 
-@router.get("/{request_id}", response_model=TenantRequestOut)
+@router.get("/{request_id}", response_model=TenantRequestResponse)
 def get_request(
     request_id: int,
     db: Session = Depends(get_db),
@@ -107,14 +110,14 @@ def get_request(
         if not request:
             return not_found_error(f"Tenant request with ID {request_id} not found")
         return data_response(
-            TenantRequestOut.model_validate(request).model_dump(mode="json")
+            TenantRequestResponse.model_validate(request).model_dump(mode="json")
         )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.patch("/{request_id}", response_model=TenantRequestOut)
+@router.patch("/{request_id}", response_model=TenantRequestResponse)
 def update_request(
     request_id: int,
     update_data: TenantRequestUpdate,
@@ -132,7 +135,7 @@ def update_request(
         if current_user.id == db_obj.property.owner_id:
             updated = tenant_request_service.update(db, db_obj, update_data)
             return data_response(
-                TenantRequestOut.model_validate(updated).model_dump(mode="json")
+                TenantRequestResponse.model_validate(updated).model_dump(mode="json")
             )
         else:
             return forbidden_error("Not authorized to update this request")
@@ -160,7 +163,7 @@ async def delete_request(
         return internal_server_error(str(e))
 
 
-@router.get("/property/{property_id}", response_model=List[TenantRequestOut])
+@router.get("/property/{property_id}", response_model=List[TenantRequestResponse])
 async def get_requests_by_property(
     property_id: int,
     skip: int = 0,
@@ -179,7 +182,7 @@ async def get_requests_by_property(
         requests = tenant_request_service.get_by_property(db, property_id, skip, limit)
         return data_response(
             [
-                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                TenantRequestResponse.model_validate(r).model_dump(mode="json")
                 for r in requests
             ]
         )
@@ -188,7 +191,7 @@ async def get_requests_by_property(
         return internal_server_error(str(e))
 
 
-@router.get("/tenant/{tenant_id}", response_model=List[TenantRequestOut])
+@router.get("/tenant/{tenant_id}", response_model=List[TenantRequestResponse])
 async def get_requests_by_tenant(
     tenant_id: int,
     skip: int = 0,
@@ -207,7 +210,7 @@ async def get_requests_by_tenant(
         requests = tenant_request_service.get_by_tenant(db, tenant_id, skip, limit)
         return data_response(
             [
-                TenantRequestOut.model_validate(r).model_dump(mode="json")
+                TenantRequestResponse.model_validate(r).model_dump(mode="json")
                 for r in requests
             ]
         )

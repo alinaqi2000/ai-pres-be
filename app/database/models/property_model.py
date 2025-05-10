@@ -12,6 +12,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
 from enums.unit_type import UnitType
+from enums.property_type import PropertyType
 
 
 class Unit(Base):
@@ -61,6 +62,7 @@ class Property(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True)
     city = Column(String(100))
+    property_type = Column(Enum(PropertyType))
     address = Column(String(255))
     description = Column(String(2000), nullable=True)
     total_area = Column(Float, nullable=True)

@@ -3,17 +3,8 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from .image_response import PropertyImageResponse, UnitImageResponse
 from enums.unit_type import UnitType
-
-
-class UserResponse(BaseModel):
-    id: int
-    name: str
-    email: str
-    city: str
-
-    class Config:
-        from_attributes = True
-
+from enums.property_type import PropertyType
+from .auth_schema import UserMinimumResponse
 
 class UnitResponse(BaseModel):
     id: int
@@ -35,13 +26,22 @@ class UnitResponse(BaseModel):
         from_attributes = True
 
 
+class PropertyMinimumResponse(BaseModel):
+    id: int
+    name: str
+    city: str
+    address: str
+    property_type: PropertyType
+
+    model_config = ConfigDict(from_attributes=True)
+
 class FloorResponse(BaseModel):
     id: int
     number: int
     name: Optional[str]
     description: Optional[str]
     area: Optional[float]
-    property_id: int
+    property: PropertyMinimumResponse
     units: List[UnitResponse] = []
     created_at: datetime
     updated_at: Optional[datetime]
@@ -57,10 +57,11 @@ class PropertyResponse(BaseModel):
     address: str
     description: Optional[str]
     total_area: float
+    property_type: PropertyType
     is_published: bool
     thumbnail: Optional[PropertyImageResponse] = None
     images: Optional[List[PropertyImageResponse]] = []
-    owner: UserResponse
+    owner: UserMinimumResponse
     created_at: datetime
     updated_at: Optional[datetime]
     floors: List[FloorResponse] = []
@@ -75,16 +76,6 @@ class PropertyListResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class PropertyMinimumResponse(BaseModel):
-    id: int
-    name: str
-    city: str
-    address: str
-
-    model_config = ConfigDict(from_attributes=True)
-
 
 class FloorMinimumResponse(BaseModel):
     id: int

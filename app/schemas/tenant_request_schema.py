@@ -1,23 +1,20 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
-from .property_response import (
-    UnitMinimumResponse,
-    FloorMinimumResponse,
-    PropertyMinimumResponse,
-)
-from .auth_schema import UserMinimumResponse
+
 
 
 class TenantRequestBase(BaseModel):
+    owner_id: Optional[int] = None
     tenant_id: Optional[int] = None
     property_id: int
-    floor_id: int
-    unit_id: int
+    floor_id: Optional[int] = None
+    unit_id: Optional[int] = None
     message: Optional[str] = None
     preferred_move_in: Optional[datetime] = None
     monthly_offer: Optional[int] = None
-
+    duration_months: Optional[int] = None
+    contact_method: Optional[str] = None
 
 class TenantRequestCreate(TenantRequestBase):
     pass
@@ -28,10 +25,4 @@ class TenantRequestUpdate(BaseModel):
     is_seen: Optional[bool] = None
 
 
-class TenantRequestMinimumResponse(BaseModel):
-    property: PropertyMinimumResponse
-    floor: FloorMinimumResponse
-    unit: UnitMinimumResponse
-    monthly_offer: Optional[int] = None
 
-    model_config = ConfigDict(from_attributes=True)
