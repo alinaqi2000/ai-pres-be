@@ -55,7 +55,7 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
     try:
         user = create_user(payload, db)
         token = create_access_token({"sub": user.email})
-        return data_response({"access_token": token, "token_type": "bearer"})
+        return data_response({"access_token": token, "token_type": "bearer", "user": UserResponse.from_orm(user)})
     except Exception as e:
         traceback.print_exc()
         return internal_server_error("Failed to register user", str(e))
@@ -69,7 +69,7 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
             return unauthorized_error("Invalid credentials")
 
         token = create_access_token({"sub": user.email})
-        return data_response({"access_token": token, "token_type": "bearer"})
+        return data_response({"access_token": token, "token_type": "bearer", "user": UserResponse.from_orm(user)})
 
     except Exception as e:
         traceback.print_exc()
@@ -87,14 +87,17 @@ def get_all_users_endpoint(
         return internal_server_error("Failed to retrieve users", str(e))
 
 
-@router.get("/user/{user_id}", response_model=Union[UserResponse, ResponseModel])
+@router.get("/me", response_model=Union[UserResponse, ResponseModel])
 def get_user(
-    user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
+    db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
-        user = get_user_by_id(user_id, db)
+        user = get_user_by_id(current_user.id, db)
         if not user:
-            return not_found_error(f"No user found with id {user_id}")
+            return not_found_error(f"No user found with id {current_user.id}")
         return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()

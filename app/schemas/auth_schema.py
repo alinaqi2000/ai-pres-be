@@ -36,7 +36,6 @@ class UserResponse(BaseModel):
     name: str
     email: str
     is_active: bool
-    roles: List[RoleOut] = []
 
     class Config:
         orm_mode = True
