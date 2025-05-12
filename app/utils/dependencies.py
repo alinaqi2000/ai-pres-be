@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -10,15 +10,10 @@ from database.init import get_db
 from database.models.user_model import User
 from config import ALGORITHM, SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
 
-from responses.error import (
-    unauthorized_error,
-    not_found_error
-)
+from responses.error import unauthorized_error, not_found_error
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/signin")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# ------------------ Hashing and Verify Password ------------------
 
 
 def hash_password(password):
@@ -27,9 +22,6 @@ def hash_password(password):
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
-
-
-# ------------------ Create Access Token ------------------
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -41,20 +33,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-# ------------------ GET Current User ------------------
-
-
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
+) -> User:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
         if email is None:
-            return unauthorized_error("Invalid credentials")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
     except JWTError:
-        return unauthorized_error("Invalid provided token")
+        raise HTTPException(status_code=401, detail="Invalid provided token")
+    
     user = db.query(User).filter_by(email=email).first()
     if user is None:
-        return not_found_error("User not found")
+        raise HTTPException(status_code=404, detail="User not found")
+    
     return user

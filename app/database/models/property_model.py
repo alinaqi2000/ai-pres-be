@@ -1,8 +1,19 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Enum,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
 from enums.unit_type import UnitType
+from enums.property_type import PropertyType
+
 
 class Unit(Base):
     __tablename__ = "units"
@@ -13,14 +24,20 @@ class Unit(Base):
     unit_type = Column(Enum(UnitType))
     area = Column(Float, nullable=True)
     description = Column(String(2000), nullable=True)
+    monthly_rent = Column(Integer, nullable=False)
+    is_occupied = Column(Boolean, default=True)
     has_washroom = Column(Boolean, default=False)
     has_air_conditioning = Column(Boolean, default=False)
     has_internet = Column(Boolean, default=False)
     floor_id = Column(Integer, ForeignKey("floors.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    images = relationship("UnitImage", back_populates="unit", cascade="all, delete-orphan")
+
+    images = relationship(
+        "UnitImage", back_populates="unit", cascade="all, delete-orphan"
+    )
+    tenant_requests = relationship("TenantRequest", back_populates="unit")
+
 
 class Floor(Base):
     __tablename__ = "floors"
@@ -36,6 +53,8 @@ class Floor(Base):
 
     units = relationship("Unit", backref="floor", cascade="all, delete-orphan")
     property = relationship("Property", back_populates="floors")
+    tenant_requests = relationship("TenantRequest", back_populates="floor")
+
 
 class Property(Base):
     __tablename__ = "properties"
@@ -43,6 +62,7 @@ class Property(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True)
     city = Column(String(100))
+    property_type = Column(Enum(PropertyType))
     address = Column(String(255))
     description = Column(String(2000), nullable=True)
     total_area = Column(Float, nullable=True)
@@ -51,6 +71,13 @@ class Property(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    floors = relationship("Floor", back_populates="property", cascade="all, delete-orphan")
-    images = relationship("PropertyImage", back_populates="property", cascade="all, delete-orphan")
+    floors = relationship(
+        "Floor", back_populates="property", cascade="all, delete-orphan"
+    )
+    images = relationship(
+        "PropertyImage", back_populates="property", cascade="all, delete-orphan"
+    )
+    tenant_requests = relationship(
+        "TenantRequest", back_populates="property", cascade="all, delete-orphan"
+    )
     owner = relationship("User")

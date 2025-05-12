@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
 
+
 class PropertyImage(Base):
     __tablename__ = "property_images"
 
@@ -14,6 +15,7 @@ class PropertyImage(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     property = relationship("Property", back_populates="images")
+
 
 class UnitImage(Base):
     __tablename__ = "unit_images"

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 
 class RoleBase(BaseModel):
@@ -25,6 +26,8 @@ class ResponseModel(BaseModel):
     message: str
     data: Optional[RoleUpdate] = None
     error: Optional[dict] = None
+
+    updated_at: Optional[datetime]
 
 
 class RoleOut(RoleBase):

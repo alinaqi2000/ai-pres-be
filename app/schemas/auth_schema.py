@@ -31,7 +31,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
 
 
-class UserOut(BaseModel):
+class UserResponse(BaseModel):
     id: int
     name: str
     email: str
@@ -49,3 +49,12 @@ class ResponseModel(BaseModel):
     message: str
     data: Optional[Union[Token, UserUpdate]] = None
     error: Optional[dict] = None
+
+class UserMinimumResponse(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+    city: str
+
+    class Config:
+        from_attributes = True
