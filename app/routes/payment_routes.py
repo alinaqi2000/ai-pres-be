@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from starlette.responses import JSONResponse # Added for type checking
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -32,13 +33,21 @@ def create_payment(
     if not isinstance(current_user, User):
         return current_user
     try:
-        created_payment = payment_service.create_payment(
+        created_payment_result = payment_service.create_payment(
             db, payment_in, current_user.id
         )
+
+        if isinstance(created_payment_result, JSONResponse):
+            return created_payment_result
+
+        created_payment = created_payment_result
         return data_response(
             PaymentResponse.model_validate(created_payment).model_dump(mode="json")
         )
-    except ValueError as ve:
+    except HTTPException as he:
+        raise he
+    except ValueError as ve: 
+        traceback.print_exc()
         return conflict_error(str(ve))
     except Exception as e:
         traceback.print_exc()
@@ -91,24 +100,30 @@ def update_payment(
     try:
         payment_to_check = payment_service.get_payment(db, payment_id)
         if not payment_to_check:
-            return not_found_error(f"Payment with ID {payment_id} not found.")
+            return not_found_error(f"Payment with ID {payment_id} not found to check authorization.")
+        if isinstance(payment_to_check, JSONResponse):
+             return payment_to_check
 
-        if not payment_to_check.booking:
-            return internal_server_error("Booking data associated with payment is missing.")
+        booking_of_payment = db.query(Booking).filter(Booking.id == payment_to_check.booking_id).first()
+        if not booking_of_payment:
+            return internal_server_error("Booking associated with payment not found.")
+
+        property_of_booking = db.query(Property).filter(Property.id == booking_of_payment.property_id).first()
+        if not property_of_booking:
+            return internal_server_error("Property associated with booking not found.")
+
+        if property_of_booking.owner_id != current_user.id:
+            return forbidden_error("Not authorized to update this payment. Only property owner can update.")
+
+        updated_payment_result = payment_service.update_payment(
+            db, payment_id, payment_update
+        )
+
+        if isinstance(updated_payment_result, JSONResponse):
+            return updated_payment_result
         
-        if not payment_to_check.booking.property:
-             return internal_server_error("Property data associated with booking is missing.")
-
-        if payment_to_check.booking.property.owner_id != current_user.id:
-            return forbidden_error("Not authorized to update this payment.")
-
-        updated_payment = payment_service.update_payment(db, payment_id, payment_update)
-        if not updated_payment:
-            return not_found_error(
-                f"Payment with ID {payment_id} update failed."
-            )
         return data_response(
-            PaymentResponse.model_validate(updated_payment).model_dump(mode="json")
+            PaymentResponse.model_validate(updated_payment_result).model_dump(mode="json")
         )
     except ValueError as ve:
         return conflict_error(str(ve))

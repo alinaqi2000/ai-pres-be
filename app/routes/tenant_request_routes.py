@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 
 from database.models.tenant_request_model import TenantRequest
@@ -21,6 +21,7 @@ from responses.error import (
 )
 
 import traceback
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/tenant_requests", tags=["Tenant Requests"])
 tenant_request_service = TenantRequestService()
@@ -36,41 +37,71 @@ async def create_request(
         return current_user
 
     try:
-        # Check for existing requests
         existing = tenant_request_service.check_existing_request(
             db, current_user.id, request
         )
         if existing:
             return conflict_error("Tenant has already made a request for this property.")
 
-        property_exists = db.query(Property).filter_by(id=request.property_id).first()
-        if not property_exists:
-            return not_found_error(
-                f"Property with id {request.property_id} does not exist"
+        if not request.unit_id:
+            return conflict_error("unit_id is required to make a tenant request.")
+
+        # Fetch Unit and its hierarchy (Floor, Property)
+        unit_obj = (
+            db.query(Unit)
+            .options(
+                selectinload(Unit.floor).selectinload(Floor.property)
+            )
+            .filter(Unit.id == request.unit_id)
+            .first()
+        )
+
+        if not unit_obj:
+            return not_found_error(f"Unit with ID {request.unit_id} not found.")
+        
+        if unit_obj.is_occupied: 
+            return conflict_error(f"Unit with ID {request.unit_id} is currently occupied and not available for requests.")
+
+        floor_obj = unit_obj.floor
+        property_obj = floor_obj.property
+
+        if not floor_obj:
+             return internal_server_error(f"Critical: Floor not found for unit {unit_obj.id}. Data inconsistency.")
+        if not property_obj:
+             return internal_server_error(f"Critical: Property not found for floor {floor_obj.id}. Data inconsistency.")
+
+        if property_obj.owner_id == current_user.id:
+            return forbidden_error(
+                "Property owners cannot make tenant requests for their own properties."
             )
 
-        if isinstance(property_exists, Property) and property_exists.owner_id == current_user.id:
-            return forbidden_error("Not authorized to make a request for this property")
-
-        if request.floor_id:
-            floor_exists = db.query(Floor).filter_by(id=request.floor_id).first()
-            if not floor_exists:
-                return not_found_error(f"Floor with id {request.floor_id} does not exist")
-
-        if request.unit_id:
-            unit_exists = db.query(Unit).filter_by(id=request.unit_id, is_occupied=False).first()
-            if not unit_exists:
-                return not_found_error(f"Unit with id {request.unit_id} is not available")
-
-        request.tenant_id = current_user.id
-        request.owner_id = property_exists.owner_id
-        created = tenant_request_service.create(db, request)
+        actual_request_payload = TenantRequestCreate(
+            unit_id=unit_obj.id,
+            floor_id=floor_obj.id,
+            property_id=property_obj.id,
+            tenant_id=current_user.id,
+            owner_id=property_obj.owner_id,
+            message=request.message,
+            preferred_move_in=request.preferred_move_in,
+            duration_months=request.duration_months,
+        )
+        
+        existing_request = tenant_request_service.check_existing_request(
+            db, current_user.id, actual_request_payload 
+        )
+        if existing_request:
+            return conflict_error(
+                "You have already made a request for this unit, or another pending/accepted request for you exists for this unit."
+            )
+        
+        created_tenant_request = tenant_request_service.create(db, actual_request_payload)
+        
         return data_response(
-            TenantRequestResponse.model_validate(created).model_dump(mode="json")
+            TenantRequestResponse.model_validate(created_tenant_request).model_dump(mode="json")
         )
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error(str(e))
+        return internal_server_error(f"An unexpected error occurred: {str(e)}")
 
 
 @router.get("/all_requests", response_model=List[TenantRequestResponse])

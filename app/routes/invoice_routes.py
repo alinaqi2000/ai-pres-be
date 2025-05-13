@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import traceback
@@ -8,7 +8,7 @@ from schemas.invoice_schema import InvoiceCreate, InvoiceUpdate
 from schemas.booking_response import InvoiceResponse
 from services.invoice_service import InvoiceService
 from utils.dependencies import get_current_user
-from responses.error import not_found_error, internal_server_error
+from responses.error import not_found_error, internal_server_error, forbidden_error
 from responses.success import data_response, empty_response
 from database.models import User
 
@@ -26,7 +26,10 @@ def create_invoice(
     if not isinstance(current_user, User):
         return current_user
     try:
-        return invoice_service.create(db, invoice)
+        created_invoice = invoice_service.create(db, invoice)
+        return created_invoice 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

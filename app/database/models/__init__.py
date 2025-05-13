@@ -8,5 +8,6 @@ from .invoice_model import Invoice
 from .invoice_line_item_model import InvoiceLineItem
 from .payment_model import Payment
 from .payment_method_model import PaymentMethod
+from .tenant_model import Tenant
 
-__all__ = ["User", "Role", "Property", "Floor", "Unit", "PropertyImage", "UnitImage", "TenantRequest", "Booking", "Invoice", "InvoiceLineItem", "Payment", "PaymentMethod"]    
+__all__ = ["User", "Role", "Property", "Floor", "Unit", "PropertyImage", "UnitImage", "TenantRequest", "Booking", "Invoice", "InvoiceLineItem", "Payment", "PaymentMethod", "Tenant"]    

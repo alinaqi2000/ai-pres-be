@@ -4,31 +4,30 @@ from typing import Optional, List
 from enums.booking_status import BookingStatus
 from enums.payment_method import PaymentMethodType, PaymentMethodStatus, PaymentMethodCategory
 from .invoice_schema import InvoiceLineItemResponse
-from .auth_schema import UserMinimumResponse
 from .tenant_request_response import TenantRequestMinimumResponse
-from .property_response import PropertyMinimumResponse
-from .property_response import FloorMinimumResponse
-from .property_response import UnitMinimumResponse
 from .booking_schema import BookingMinimumResponse
 from enums.payment_status import PaymentStatus
 from .invoice_schema import InvoiceMinimumResponse
 from .payment_method_schema import PaymentMethodMinimumResponse
+from .property_response import PropertyMinimumResponse
 
 class BookingResponse(BaseModel):
     id: int
-    tenant: UserMinimumResponse
-    tenant_request: TenantRequestMinimumResponse
+    property: PropertyMinimumResponse
+    tenant_request: Optional[TenantRequestMinimumResponse] = None 
+    tenant_id: Optional[int]
+    booked_by_owner: bool
     status: BookingStatus
-    payment_method: Optional[PaymentMethodMinimumResponse] = None
     created_at: datetime
+    start_date: datetime
+    end_date: datetime
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class InvoiceResponse(BaseModel):
     id: int
-    booking: BookingMinimumResponse
+    booking: BookingMinimumResponse 
     line_items: List[InvoiceLineItemResponse] = []
     amount: float
     created_at: datetime

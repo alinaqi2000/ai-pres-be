@@ -5,9 +5,12 @@ from datetime import datetime
 from database.models.payment_model import Payment
 from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
+from database.models.tenant_model import Tenant
+from database.models.property_model import Property, Unit
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
 from enums.payment_status import PaymentStatus
 from enums.booking_status import BookingStatus
+from responses.error import not_found_error
 
 
 class PaymentService:
@@ -18,15 +21,38 @@ class PaymentService:
         self, db: Session, payment_in: PaymentCreate, user_id: int
     ) -> Payment:
         booking = db.query(Booking).filter(Booking.id == payment_in.booking_id).first()
-        if not booking or booking.tenant_id != user_id:
-            raise ValueError("Invalid booking or user not authorized for this booking.")
+        if not booking:
+            return not_found_error("Invalid booking ID.")
+
+        authorized_to_pay = False
+
+        if booking.tenant_id:
+            tenant_for_booking = db.query(Tenant).filter(Tenant.id == booking.tenant_id).first()
+            if not tenant_for_booking:
+                return not_found_error(f"Tenant record (ID: {booking.tenant_id}) associated with the booking not found.")
+            if tenant_for_booking.owner_id == user_id:
+                authorized_to_pay = True
+        else:
+            property_to_check = None
+            if booking.unit_id:
+                unit = db.query(Unit).filter(Unit.id == booking.unit_id).first()
+                if unit and hasattr(unit, 'property_id') and unit.property_id:
+                    property_to_check = db.query(Property).filter(Property.id == unit.property_id).first()
+            elif booking.property_id:
+                property_to_check = db.query(Property).filter(Property.id == booking.property_id).first()
+            
+            if property_to_check and property_to_check.owner_id == user_id:
+                authorized_to_pay = True
+
+        if not authorized_to_pay:
+            return not_found_error("User not authorized to make payment for this booking.")
 
         if payment_in.invoice_id:
             invoice = (
                 db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
             )
             if not invoice or invoice.booking_id != payment_in.booking_id:
-                raise ValueError("Invalid invoice or invoices does not match booking.")
+                return not_found_error("Invalid invoice or invoices does not match booking.")
             if invoice.amount != payment_in.amount:
                 pass
         db_payment = Payment(**payment_in.model_dump(), status=PaymentStatus.PENDING)
@@ -40,7 +66,7 @@ class PaymentService:
     ) -> Optional[Payment]:
         db_payment = self.get_payment(db, payment_id)
         if not db_payment:
-            return None
+            return not_found_error("Payment not found.")
 
         update_data = payment_update.model_dump(exclude_unset=True)
         for key, value in update_data.items():

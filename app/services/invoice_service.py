@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from sqlalchemy import or_
+from fastapi import HTTPException
 from database.models import Invoice, Booking, Property, User, InvoiceLineItem
 from schemas.invoice_schema import InvoiceCreate, InvoiceUpdate
 
@@ -35,6 +36,14 @@ class InvoiceService:
         return query.offset(skip).limit(limit).all()
 
     def create(self, db: Session, invoice_in: InvoiceCreate) -> Invoice:
+        # Check if the booking exists
+        booking = db.query(Booking).filter(Booking.id == invoice_in.booking_id).first()
+        if not booking:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Booking with ID {invoice_in.booking_id} not found. Cannot create invoice."
+            )
+
         total_amount = sum(item.amount for item in invoice_in.line_items)
 
         db_invoice = self.model(
@@ -55,11 +64,10 @@ class InvoiceService:
         
         db.commit()  
         db.refresh(db_invoice)  
-        
- 
+
         db.refresh(db_invoice)
         if not db_invoice.line_items: 
-             db_invoice.line_items = db.query(self.line_item_model).filter(self.line_item_model.invoice_id == db_invoice.id).all()
+            db_invoice.line_items = db.query(self.line_item_model).filter(self.line_item_model.invoice_id == db_invoice.id).all()
 
         return db_invoice
 

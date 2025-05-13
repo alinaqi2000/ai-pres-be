@@ -24,3 +24,4 @@ class User(Base):
     roles = relationship(
         "Role", secondary=user_roles, back_populates="users", lazy="joined"
     )
+    tenants = relationship("Tenant", back_populates="owner")
