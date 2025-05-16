@@ -1,3 +1,4 @@
+import secrets
 from typing import Optional
 from pydantic import BaseModel
 from schemas.image_schema import (
@@ -169,8 +170,9 @@ class ImageService:
                 )
 
             # Save the file
+            random_name = f"image_{secrets.token_hex(8)}"
             file_path = await self.save_uploaded_file(
-                file, f"image_{image_count + 1}", property_id
+                file, random_name, property_id
             )
 
             # Create image
@@ -221,8 +223,9 @@ class ImageService:
                 raise Exception("Maximum number of images (3) reached for this unit")
 
             # Save the file
+            random_name = f"unit_{unit_id}_image_{secrets.token_hex(8)}"
             file_path = await self.save_uploaded_file(
-                file, f"unit_{unit_id}_image_{image_count + 1}", unit.property_id
+                file, random_name, unit.property_id
             )
 
             # Create image
