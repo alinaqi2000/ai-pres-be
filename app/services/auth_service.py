@@ -5,13 +5,18 @@ from schemas.auth_schema import UserCreate, UserUpdate
 from utils.dependencies import hash_password
 
 
-def create_user(payload: UserCreate, db: Session) -> User:
+def create_user(payload: UserCreate, db: Session, created_by_owner: bool = False, owner_id: int = None) -> User:
     user = User(
         name=payload.name,
         email=payload.email,
         city=payload.city,
+        cnic=payload.cnic,
+        gender=payload.gender,
+        nature_of_business=payload.nature_of_business,
         hashed_password=hash_password(payload.password),
         is_active=True,
+        booked_by_owner=created_by_owner,  # Set based on who creates the user
+        created_by_owner_id=owner_id,  # Track which owner created this user
     )
     db.add(user)
     db.commit()
@@ -46,9 +51,14 @@ def update_user(user_id: int, payload: UserUpdate, db: Session):
         user.name = payload.name
     if payload.email:
         user.email = payload.email
-    if payload.password:
-        user.hashed_password = hash_password(payload.password)
-
+    if payload.cnic is not None:
+        user.cnic = payload.cnic
+    if payload.gender is not None:
+        user.gender = payload.gender
+    if payload.nature_of_business is not None:
+        user.nature_of_business = payload.nature_of_business
+    if payload.city is not None:
+        user.city = payload.city
     db.commit()
     db.refresh(user)
 

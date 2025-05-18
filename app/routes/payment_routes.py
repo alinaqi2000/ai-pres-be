@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from starlette.responses import JSONResponse # Added for type checking
+from starlette.responses import JSONResponse 
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -10,6 +10,7 @@ from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
 from schemas.booking_response import PaymentResponse
+from services.email_service import EmailService
 from services.payment_service import PaymentService
 from utils.dependencies import get_current_user
 from responses.success import data_response
@@ -23,10 +24,10 @@ import traceback
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 payment_service = PaymentService()
-
+email_service = EmailService()
 
 @router.post("/create_payment", response_model=PaymentResponse)
-def create_payment(
+async def create_payment(
     payment_in: PaymentCreate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),):
@@ -41,6 +42,10 @@ def create_payment(
             return created_payment_result
 
         created_payment = created_payment_result
+        # Send email notification for payment creation
+        email_service = EmailService()
+        if current_user.email:
+            await email_service.send_create_action_email(current_user.email, "Payment", created_payment.id)
         return data_response(
             PaymentResponse.model_validate(created_payment).model_dump(mode="json")
         )
@@ -90,7 +95,7 @@ def get_payment(
 
 
 @router.patch("/{payment_id}", response_model=PaymentResponse)
-def update_payment(
+async def update_payment(
     payment_id: int,
     payment_update: PaymentUpdate,
     db: Session = Depends(get_db),
@@ -122,6 +127,11 @@ def update_payment(
         if isinstance(updated_payment_result, JSONResponse):
             return updated_payment_result
         
+        # Send email notification for payment update
+        from services.email_service import EmailService
+        email_service = EmailService()
+        if current_user.email:
+            await email_service.send_update_action_email(current_user.email, "Payment", payment_id)
         return data_response(
             PaymentResponse.model_validate(updated_payment_result).model_dump(mode="json")
         )

@@ -82,8 +82,11 @@ class InvoiceService:
         return db_invoice
 
     def delete(self, db: Session, invoice_id: int):
-        db_invoice = db.query(self.model).filter(self.model.id == invoice_id).first()
+        # Eager load the booking relationship before deletion to avoid DetachedInstanceError
+        db_invoice = db.query(self.model).options(joinedload(self.model.booking)).filter(self.model.id == invoice_id).first()
         if db_invoice:
-            db.delete(db_invoice) 
+            # Access booking to ensure it is loaded
+            _ = db_invoice.booking
+            db.delete(db_invoice)
             db.commit()
         return db_invoice

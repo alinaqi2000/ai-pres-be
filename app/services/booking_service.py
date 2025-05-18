@@ -5,13 +5,19 @@ from datetime import datetime
 
 from database.models.booking_model import Booking
 from database.models import Property, Unit
+from database.models.user_model import User
 from schemas.booking_schema import BookingCreate, BookingUpdate
 from enums.booking_status import BookingStatus
 from database.models.tenant_request_model import TenantRequest
 
+
 class BookingService:
     def get(self, db: Session, booking_id: int) -> Optional[Booking]:
         return db.query(Booking).filter(Booking.id == booking_id).first()
+        
+    # Alias for get to match route naming
+    def get_booking(self, db: Session, booking_id: int) -> Optional[Booking]:
+        return self.get(db, booking_id)
 
     def get_all(self, db: Session, skip: int = 0, limit: int = 100) -> List[Booking]:
         return db.query(Booking).offset(skip).limit(limit).all()
@@ -19,44 +25,80 @@ class BookingService:
     def get_by_tenant(
         self, db: Session, tenant_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
-        # tenant_id parameter here is actually a user_id
+        """Get bookings where this user is the tenant"""
         return (
             db.query(Booking)
-            .join(TenantRequest, TenantRequest.id == Booking.tenant_request_id, isouter=True)
+            .join(
+                TenantRequest,
+                TenantRequest.id == Booking.tenant_request_id,
+                isouter=True,
+            )
             .filter(
                 or_(
-                    Booking.tenant_id == tenant_id, 
-                    TenantRequest.tenant_id == tenant_id 
+                    Booking.tenant_id == tenant_id, TenantRequest.tenant_id == tenant_id
                 )
             )
             .offset(skip)
             .limit(limit)
             .all()
         )
+        
+    # Alias for get_by_tenant to match route naming
+    def get_my_bookings(self, db: Session, tenant_id: int) -> List[Booking]:
+        return self.get_by_tenant(db, tenant_id)
 
     def get_by_property_owner(
         self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
+        """Get bookings for properties owned by this user but made by tenants (not the owner)"""
+        # Exclude bookings made by owner for their own tenant
         return (
             db.query(Booking)
             .join(Property)
             .filter(Property.owner_id == owner_id)
+            .filter(Booking.booked_by_owner == False)
             .offset(skip)
             .limit(limit)
             .all()
         )
+    
+    def get_owner_created_bookings(
+        self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Booking]:
+        """Get bookings that were created by the property owner for their own tenants"""
+        # Only include bookings made by owner for their properties
+        return (
+            db.query(Booking)
+            .join(Property)
+            .filter(Property.owner_id == owner_id)
+            .filter(Booking.booked_by_owner == True)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        
+    # Alias to match route naming
+    def get_property_owner_bookings(self, db: Session, owner_id: int) -> List[Booking]:
+        return self.get_owner_created_bookings(db, owner_id)
 
     def get_by_property(
         self, db: Session, property_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
+        """Get bookings for a specific property"""
+        # Only include bookings not made by owner
         return (
             db.query(Booking)
             .join(Booking.unit)
             .filter(Unit.property_id == property_id)
+            .filter(Booking.booked_by_owner == False)
             .offset(skip)
             .limit(limit)
             .all()
         )
+        
+    # Alias to match route naming
+    def get_bookings_for_property(self, db: Session, property_id: int) -> List[Booking]:
+        return self.get_by_property(db, property_id)
 
     def get_by_unit(
         self, db: Session, unit_id: int, skip: int = 0, limit: int = 100
@@ -80,7 +122,9 @@ class BookingService:
         """Checks if the unit is available for the given period, excluding a specific booking (for updates)."""
         query = db.query(Booking).filter(
             Booking.unit_id == unit_id,
-            Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE]),
+            Booking.status.in_(
+                [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE]
+            ),
             Booking.start_date < end_date,
             Booking.end_date > start_date,
         )
@@ -98,81 +142,112 @@ class BookingService:
         tenant_request_id: Optional[int],
         booked_by_owner: bool = False,
     ) -> Optional[Booking]:
-        if booking_in.unit_id: 
-            # 1. Fetch the Unit
+        if booking_in.unit_id:
             unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
             if not unit:
-                print(f"ERROR: Unit {booking_in.unit_id} not found during booking creation for a specific unit.")
                 return None
-            if booking_in.property_id != unit.property_id: 
-                print(f"ERROR: Provided property_id {booking_in.property_id} does not match unit's property_id {unit.property_id}.")
-                return None 
-
-            if not self.is_unit_available(db, booking_in.unit_id, booking_in.start_date, booking_in.end_date):
-                print(f"INFO: Unit {booking_in.unit_id} is not available (general check failed).")
-                return None
-
-            if not booked_by_owner:
-                conflicting_owner_booking = db.query(Booking).filter(
+            # Check for existing bookings
+            existing_booking = (
+                db.query(Booking)
+                .filter(
                     Booking.unit_id == booking_in.unit_id,
-                    Booking.booked_by_owner == True,
-                    Booking.tenant_id.isnot(None),
-                    Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE]),
                     Booking.start_date < booking_in.end_date,
-                    Booking.end_date > booking_in.start_date
-                ).first()
-                if conflicting_owner_booking:
-                    print(f"INFO: Conflict for Unit {booking_in.unit_id} - already booked by owner for their tenant {conflicting_owner_booking.tenant_id}.")
-                    return None
-        else: 
+                    Booking.end_date > booking_in.start_date,
+                )
+                .first()
+            )
+            if existing_booking:
+                print(
+                    f"INFO: Unit {booking_in.unit_id} is already booked by owner for tenant {existing_booking.tenant_id}"
+                )
+                return None
+        else:
             if not booking_in.property_id:
-                print("ERROR: property_id must be provided for a whole property booking.")
-                return None 
-            property_units = db.query(Unit).filter(Unit.property_id == booking_in.property_id).all()
+                print(
+                    "ERROR: property_id must be provided for a whole property booking."
+                )
+                return None
+            property_units = (
+                db.query(Unit).filter(Unit.property_id == booking_in.property_id).all()
+            )
             if not property_units:
-                print(f"INFO: No units found for property {booking_in.property_id} to book as a whole.")
-                return None 
+                print(
+                    f"INFO: No units found for property {booking_in.property_id} to book as a whole."
+                )
+                return None
 
-            for unit_in_prop in property_units:
-                if not self.is_unit_available(db, unit_in_prop.id, booking_in.start_date, booking_in.end_date):
-                    print(f"INFO: Unit {unit_in_prop.id} in property {booking_in.property_id} is not available (whole property booking check failed).")
-                    return None
-                
-                if not booked_by_owner:
-                    conflicting_owner_booking = db.query(Booking).filter(
-                        Booking.unit_id == unit_in_prop.id,
+            # Check for duplicate bookings by the same owner for the same tenant
+            if booked_by_owner and actual_tenant_id:
+                duplicate_tenant_booking = (
+                    db.query(Booking)
+                    .filter(
+                        Booking.property_id == booking_in.property_id,
+                        Booking.tenant_id == actual_tenant_id,
                         Booking.booked_by_owner == True,
-                        Booking.tenant_id.isnot(None),
-                        Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE]),
+                        Booking.status.in_(
+                            [
+                                BookingStatus.PENDING,
+                                BookingStatus.CONFIRMED,
+                                BookingStatus.ACTIVE,
+                            ]
+                        ),
                         Booking.start_date < booking_in.end_date,
-                        Booking.end_date > booking_in.start_date
-                    ).first()
-                    if conflicting_owner_booking:
-                        print(f"INFO: Conflict for Unit {unit_in_prop.id} in property {booking_in.property_id} - already booked by owner for their tenant {conflicting_owner_booking.tenant_id} (whole property booking check failed).")
-                        return None
-    
-  
-        db_booking = Booking(
-            property_id=booking_in.property_id, 
-            floor_id=booking_in.floor_id if booking_in.unit_id else None, 
-            unit_id=booking_in.unit_id, 
+                        Booking.end_date > booking_in.start_date,
+                    )
+                    .first()
+                )
+                if duplicate_tenant_booking:
+                    print(
+                        f"INFO: A booking already exists for tenant {actual_tenant_id} during this time period"
+                    )
+                    return None
+
+            # Check if any unit in the property is already booked
+            for unit_in_prop in property_units:
+                existing_booking = (
+                    db.query(Booking)
+                    .filter(
+                        Booking.unit_id == unit_in_prop.id,
+                        Booking.status.in_(
+                            [
+                                BookingStatus.PENDING,
+                                BookingStatus.CONFIRMED,
+                                BookingStatus.ACTIVE,
+                            ]
+                        ),
+                        Booking.start_date < booking_in.end_date,
+                        Booking.end_date > booking_in.start_date,
+                    )
+                    .first()
+                )
+                if existing_booking:
+                    print(
+                        f"INFO: Unit {unit_in_prop.id} in property {booking_in.property_id} is already booked"
+                    )
+                    return None
+
+        # Create the booking
+        booking = Booking(
+            tenant_id=actual_tenant_id,
+            property_id=booking_in.property_id,
+            floor_id=booking_in.floor_id,
+            unit_id=booking_in.unit_id,
             start_date=booking_in.start_date,
             end_date=booking_in.end_date,
             total_price=booking_in.total_price,
             notes=booking_in.notes,
-            tenant_id=actual_tenant_id,
             tenant_request_id=tenant_request_id,
             booked_by_owner=booked_by_owner,
-            status=BookingStatus.PENDING,
         )
-        db.add(db_booking)
+        db.add(booking)
         db.commit()
-        db.refresh(db_booking)
-        return db_booking
+        db.refresh(booking)
+        return booking
 
     def update(
         self, db: Session, db_booking: Booking, booking_in: BookingUpdate
     ) -> Optional[Booking]:
+        """Update a booking"""
         update_data = booking_in.model_dump(exclude_unset=True)
 
         new_start_date = update_data.get("start_date", db_booking.start_date)
@@ -198,6 +273,13 @@ class BookingService:
         db.commit()
         db.refresh(db_booking)
         return db_booking
+        
+    # Alias to match route naming
+    def update_booking(self, db: Session, booking_id: int, booking_in: BookingUpdate) -> Optional[Booking]:
+        db_booking = self.get(db, booking_id)
+        if not db_booking:
+            return None
+        return self.update(db, db_booking, booking_in)
 
     def delete(
         self, db: Session, booking_id: int, user_id: int, is_owner: bool

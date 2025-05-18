@@ -5,7 +5,6 @@ from datetime import datetime
 from database.models.payment_model import Payment
 from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
-from database.models.tenant_model import Tenant
 from database.models.property_model import Property, Unit
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
 from enums.payment_status import PaymentStatus
@@ -27,11 +26,11 @@ class PaymentService:
         authorized_to_pay = False
 
         if booking.tenant_id:
-            tenant_for_booking = db.query(Tenant).filter(Tenant.id == booking.tenant_id).first()
-            if not tenant_for_booking:
-                return not_found_error(f"Tenant record (ID: {booking.tenant_id}) associated with the booking not found.")
-            if tenant_for_booking.owner_id == user_id:
-                authorized_to_pay = True
+            # Check if the booking was created by the owner
+            if booking.booked_by_owner and booking.property_id:
+                property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+                if property_obj and property_obj.owner_id == user_id:
+                    authorized_to_pay = True
         else:
             property_to_check = None
             if booking.unit_id:
@@ -126,14 +125,24 @@ class PaymentService:
             .all()
         )
 
-    def get_payments_by_user(
-        self, db: Session, user_id: int, skip: int = 0, limit: int = 100
-    ) -> List[Payment]:
-        return (
+    def get_payments_by_user(self, db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[Payment]:
+        # Get payments where the user is the tenant
+        tenant_payments = (
             db.query(Payment)
             .join(Payment.booking)
             .filter(Booking.tenant_id == user_id)
-            .offset(skip)
-            .limit(limit)
             .all()
         )
+        
+        # Get payments where the user is the property owner
+        owner_payments = (
+            db.query(Payment)
+            .join(Payment.booking)
+            .join(Booking.property)
+            .filter(Property.owner_id == user_id)
+            .all()
+        )
+        
+        # Combine and limit results
+        all_payments = tenant_payments + owner_payments
+        return all_payments[skip:skip+limit]

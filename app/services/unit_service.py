@@ -19,10 +19,16 @@ class UnitService(BaseService):
     def get_unit(self, db: Session, unit_id: int) -> Optional[Unit]:
         return self.get(db, unit_id)
 
-    def get_units(
+    def get_units_by_floor(
         self, db: Session, floor_id: int, skip: int = 0, limit: int = 100
     ) -> List[Unit]:
         query = db.query(self.model).filter(self.model.floor_id == floor_id)
+        return query.offset(skip).limit(limit).all()
+
+    def get_units(
+        self, db: Session, property_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Unit]:
+        query = db.query(self.model).filter(self.model.property_id == property_id)
         return query.offset(skip).limit(limit).all()
 
     def get_available_units(

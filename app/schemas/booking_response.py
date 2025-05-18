@@ -2,20 +2,25 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 from enums.booking_status import BookingStatus
-from enums.payment_method import PaymentMethodType, PaymentMethodStatus, PaymentMethodCategory
+from enums.payment_method import (
+    PaymentMethodType,
+    PaymentMethodStatus,
+    PaymentMethodCategory,
+)
 from .invoice_schema import InvoiceLineItemResponse
 from .tenant_request_response import TenantRequestMinimumResponse
 from .booking_schema import BookingMinimumResponse
 from enums.payment_status import PaymentStatus
 from .invoice_schema import InvoiceMinimumResponse
 from .payment_method_schema import PaymentMethodMinimumResponse
+from .auth_schema import UserMinimumResponse
 from .property_response import PropertyMinimumResponse
 
 class BookingResponse(BaseModel):
     id: int
-    property: PropertyMinimumResponse
-    tenant_request: Optional[TenantRequestMinimumResponse] = None 
-    tenant_id: Optional[int]
+    tenant_request: Optional[TenantRequestMinimumResponse] = None
+    tenant: Optional[UserMinimumResponse] = None
+    property: Optional[PropertyMinimumResponse] = None
     booked_by_owner: bool
     status: BookingStatus
     created_at: datetime
@@ -25,14 +30,21 @@ class BookingResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # def populate_fields(self):
+    #      if self.tenant_request is not None:
+    #         self.tenant = None
+    #         self.property = None
+        
+
 class InvoiceResponse(BaseModel):
     id: int
-    booking: BookingMinimumResponse 
+    tenant: Optional[UserMinimumResponse] = None
+    booking: BookingMinimumResponse
     line_items: List[InvoiceLineItemResponse] = []
     amount: float
     created_at: datetime
     updated_at: Optional[datetime]
-
+    
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -58,7 +70,3 @@ class PaymentMethodResponse(BaseModel):
     category: PaymentMethodCategory = PaymentMethodCategory.MOBILE_WALLET
 
     model_config = ConfigDict(from_attributes=True)
-
-
-
-    

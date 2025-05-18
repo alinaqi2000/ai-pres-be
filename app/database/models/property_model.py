@@ -66,6 +66,7 @@ class Property(Base):
     address = Column(String(255))
     description = Column(String(2000), nullable=True)
     total_area = Column(Float, nullable=True)
+    monthly_rent = Column(Float, nullable=True)
     is_published = Column(Boolean, default=False)
     owner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

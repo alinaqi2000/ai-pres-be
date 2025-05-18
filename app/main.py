@@ -11,7 +11,6 @@ from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
 from routes import (
     auth_routes,
-    role_routes,
     property_routes,
     image_routes,
     tenant_request_routes,
@@ -19,7 +18,6 @@ from routes import (
     invoice_routes,
     payment_routes,
     payment_method_routes,
-    tenant_routes,
 )
 
 
@@ -47,7 +45,6 @@ app.add_middleware(
 )
 
 app.include_router(auth_routes.router)
-app.include_router(role_routes.router)
 app.include_router(property_routes.router)
 app.include_router(image_routes.router)
 app.include_router(tenant_request_routes.router)
@@ -55,7 +52,6 @@ app.include_router(booking_routes.router)
 app.include_router(invoice_routes.router)
 app.include_router(payment_routes.router)
 app.include_router(payment_method_routes.router)
-app.include_router(tenant_routes.router)
 
 @app.get("/")
 def read_root():

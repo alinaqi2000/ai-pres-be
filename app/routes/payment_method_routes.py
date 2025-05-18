@@ -19,14 +19,16 @@ from responses.error import (
     conflict_error,
     bad_request_error,
 )
+from services.email_service import EmailService
 
 router = APIRouter(prefix="/payment-methods", tags=["Payment Methods"])
+email_service = EmailService()
 
 
 @router.post(
     "/create-payment-method", response_model=PaymentMethodResponse
 )
-def route_create_payment_method(
+async def route_create_payment_method(
     payment_method: PaymentMethodCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -41,6 +43,9 @@ def route_create_payment_method(
         else:
             return internal_server_error(result["error"])
 
+    # Send email notification for payment method creation
+    if current_user.email:
+        await email_service.send_create_action_email(current_user.email, "Payment Method", result['id'] if isinstance(result, dict) and 'id' in result else None)
     return data_response(result)
 
 
