@@ -14,8 +14,7 @@ from database.models.tenant_request_model import TenantRequest
 class BookingService:
     def get(self, db: Session, booking_id: int) -> Optional[Booking]:
         return db.query(Booking).filter(Booking.id == booking_id).first()
-        
-    # Alias for get to match route naming
+
     def get_booking(self, db: Session, booking_id: int) -> Optional[Booking]:
         return self.get(db, booking_id)
 
@@ -42,8 +41,7 @@ class BookingService:
             .limit(limit)
             .all()
         )
-        
-    # Alias for get_by_tenant to match route naming
+
     def get_my_bookings(self, db: Session, tenant_id: int) -> List[Booking]:
         return self.get_by_tenant(db, tenant_id)
 
@@ -51,7 +49,6 @@ class BookingService:
         self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
         """Get bookings for properties owned by this user but made by tenants (not the owner)"""
-        # Exclude bookings made by owner for their own tenant
         return (
             db.query(Booking)
             .join(Property)
@@ -61,12 +58,11 @@ class BookingService:
             .limit(limit)
             .all()
         )
-    
+
     def get_owner_created_bookings(
         self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
         """Get bookings that were created by the property owner for their own tenants"""
-        # Only include bookings made by owner for their properties
         return (
             db.query(Booking)
             .join(Property)
@@ -76,8 +72,7 @@ class BookingService:
             .limit(limit)
             .all()
         )
-        
-    # Alias to match route naming
+
     def get_property_owner_bookings(self, db: Session, owner_id: int) -> List[Booking]:
         return self.get_owner_created_bookings(db, owner_id)
 
@@ -85,7 +80,6 @@ class BookingService:
         self, db: Session, property_id: int, skip: int = 0, limit: int = 100
     ) -> List[Booking]:
         """Get bookings for a specific property"""
-        # Only include bookings not made by owner
         return (
             db.query(Booking)
             .join(Booking.unit)
@@ -95,8 +89,7 @@ class BookingService:
             .limit(limit)
             .all()
         )
-        
-    # Alias to match route naming
+
     def get_bookings_for_property(self, db: Session, property_id: int) -> List[Booking]:
         return self.get_by_property(db, property_id)
 
@@ -146,7 +139,6 @@ class BookingService:
             unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
             if not unit:
                 return None
-            # Check for existing bookings
             existing_booking = (
                 db.query(Booking)
                 .filter(
@@ -176,7 +168,6 @@ class BookingService:
                 )
                 return None
 
-            # Check for duplicate bookings by the same owner for the same tenant
             if booked_by_owner and actual_tenant_id:
                 duplicate_tenant_booking = (
                     db.query(Booking)
@@ -202,7 +193,6 @@ class BookingService:
                     )
                     return None
 
-            # Check if any unit in the property is already booked
             for unit_in_prop in property_units:
                 existing_booking = (
                     db.query(Booking)
@@ -226,7 +216,6 @@ class BookingService:
                     )
                     return None
 
-        # Create the booking
         booking = Booking(
             tenant_id=actual_tenant_id,
             property_id=booking_in.property_id,
@@ -273,9 +262,10 @@ class BookingService:
         db.commit()
         db.refresh(db_booking)
         return db_booking
-        
-    # Alias to match route naming
-    def update_booking(self, db: Session, booking_id: int, booking_in: BookingUpdate) -> Optional[Booking]:
+
+    def update_booking(
+        self, db: Session, booking_id: int, booking_in: BookingUpdate
+    ) -> Optional[Booking]:
         db_booking = self.get(db, booking_id)
         if not db_booking:
             return None

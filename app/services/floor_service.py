@@ -65,7 +65,6 @@ class FloorService(BaseService):
             if existing_basement:
                 raise ValueError("Basement floor already exists for this property")
 
-        # Check if regular numbered floor already exists
         if floor_in.number > 0:
             existing_floor = (
                 db.query(FloorModel)
@@ -117,13 +116,10 @@ class FloorService(BaseService):
         if not db_obj:
             return None
 
-        # Get the property ID from the existing floor
         property_id = db_obj.property_id
 
-        # Validate the update with the existing floor excluded from checks
         self.validate_floor(db, property_id, floor_in, exclude_floor_id=floor_id)
 
-        # Set default name if not provided
         self.set_default_floor_name(floor_in)
 
         return self.update(db, db_obj, floor_in)

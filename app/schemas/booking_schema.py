@@ -7,6 +7,7 @@ from enums.property_type import PropertyType
 from .property_response import FloorMinimumResponse
 from .property_response import UnitMinimumResponse
 
+
 class BookingBase(BaseModel):
     property_id: Optional[int] = None
     floor_id: Optional[int] = None
@@ -60,6 +61,5 @@ class BookingMinimumResponse(BaseModel):
     property: Optional[PropertyMinimumResponse] = None
     floor: Optional[FloorMinimumResponse] = None
     unit: Optional[UnitMinimumResponse] = None
-  
 
     model_config = ConfigDict(from_attributes=True)

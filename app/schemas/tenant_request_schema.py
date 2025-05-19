@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Optional
 
 
-
 class TenantRequestBase(BaseModel):
     owner_id: Optional[int] = None
     tenant_id: Optional[int] = None
@@ -16,6 +15,7 @@ class TenantRequestBase(BaseModel):
     duration_months: Optional[int] = None
     contact_method: Optional[str] = None
 
+
 class TenantRequestCreate(TenantRequestBase):
     pass
 
@@ -23,6 +23,3 @@ class TenantRequestCreate(TenantRequestBase):
 class TenantRequestUpdate(BaseModel):
     status: Optional[str] = None
     is_seen: Optional[bool] = None
-
-
-

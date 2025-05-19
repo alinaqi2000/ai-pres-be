@@ -6,6 +6,7 @@ from enums.unit_type import UnitType
 from enums.property_type import PropertyType
 from .auth_schema import UserMinimumResponse
 
+
 class UnitMinimumResponse(BaseModel):
     id: int
     name: str
@@ -26,7 +27,7 @@ class FloorMinimumResponse(BaseModel):
 
 class PropertyMinimumResponse(BaseModel):
     id: int
-    property_id: Optional[str] = None  # Dynamically generated property ID
+    property_id: Optional[str] = None  
     name: str
     city: str
     address: str
@@ -53,12 +54,14 @@ class UnitResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class UnitListResponse(UnitResponse):
     total: int
     property: PropertyMinimumResponse
     floor: FloorMinimumResponse
     unit: UnitMinimumResponse
     model_config = ConfigDict(from_attributes=True)
+
 
 class FloorResponse(BaseModel):
     id: int
@@ -81,14 +84,14 @@ class FloorListResponse(FloorResponse):
 
 class PropertyResponse(BaseModel):
     id: int
-    property_id: Optional[str] = None 
+    property_id: Optional[str] = None
     name: str
     city: str
     address: str
     description: Optional[str]
     total_area: float
     monthly_rent: Optional[float] = None
-    meta: Optional[Dict[str, Any]] = None 
+    meta: Optional[Dict[str, Any]] = None
     property_type: PropertyType
     is_published: bool
     thumbnail: Optional[PropertyImageResponse] = None
@@ -102,5 +105,5 @@ class PropertyResponse(BaseModel):
 
 class PropertyListResponse(PropertyResponse):
     floors: List[FloorMinimumResponse]
-    # units: List[UnitMinimumResponse]    
+    # units: List[UnitMinimumResponse]
     model_config = ConfigDict(from_attributes=True)

@@ -53,20 +53,20 @@ class TenantRequestService:
             .filter(
                 TenantRequest.tenant_id == tenant_id,
                 (
-                    (TenantRequest.property_id == request.property_id) &
-                    (TenantRequest.floor_id == request.floor_id) &
-                    (TenantRequest.unit_id == request.unit_id)
-                ) |
-                (
-                    (TenantRequest.property_id == request.property_id) &
-                    (TenantRequest.floor_id == request.floor_id) &
-                    (TenantRequest.unit_id.is_(None))
-                ) |
-                (
-                    (TenantRequest.property_id == request.property_id) &
-                    (TenantRequest.floor_id.is_(None)) &
-                    (TenantRequest.unit_id.is_(None))
+                    (TenantRequest.property_id == request.property_id)
+                    & (TenantRequest.floor_id == request.floor_id)
+                    & (TenantRequest.unit_id == request.unit_id)
                 )
+                | (
+                    (TenantRequest.property_id == request.property_id)
+                    & (TenantRequest.floor_id == request.floor_id)
+                    & (TenantRequest.unit_id.is_(None))
+                )
+                | (
+                    (TenantRequest.property_id == request.property_id)
+                    & (TenantRequest.floor_id.is_(None))
+                    & (TenantRequest.unit_id.is_(None))
+                ),
             )
             .first()
         )

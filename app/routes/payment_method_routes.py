@@ -25,9 +25,7 @@ router = APIRouter(prefix="/payment-methods", tags=["Payment Methods"])
 email_service = EmailService()
 
 
-@router.post(
-    "/create-payment-method", response_model=PaymentMethodResponse
-)
+@router.post("/create-payment-method", response_model=PaymentMethodResponse)
 async def route_create_payment_method(
     payment_method: PaymentMethodCreate,
     db: Session = Depends(get_db),
@@ -43,17 +41,18 @@ async def route_create_payment_method(
         else:
             return internal_server_error(result["error"])
 
-    # Send email notification for payment method creation
     if current_user.email:
-        await email_service.send_create_action_email(current_user.email, "Payment Method", result['id'] if isinstance(result, dict) and 'id' in result else None)
+        await email_service.send_create_action_email(
+            current_user.email,
+            "Payment Method",
+            result["id"] if isinstance(result, dict) and "id" in result else None,
+        )
     return data_response(result)
 
 
-@router.get(
-    "/get-payment-methods", response_model=List[PaymentMethodResponse]
-)
+@router.get("/get-payment-methods", response_model=List[PaymentMethodResponse])
 def read_payment_methods(
-    db: Session = Depends(get_db), current_user = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
     if not isinstance(current_user, User):
         return current_user
@@ -67,7 +66,7 @@ def read_payment_methods(
 
 @router.get("/{key}", response_model=PaymentMethodResponse)
 def read_payment_method(
-    key: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)
+    key: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
     if not isinstance(current_user, User):
         return current_user

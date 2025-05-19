@@ -26,32 +26,47 @@ class PaymentService:
         authorized_to_pay = False
 
         if booking.tenant_id:
-            # Check if the booking was created by the owner
             if booking.booked_by_owner and booking.property_id:
-                property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+                property_obj = (
+                    db.query(Property)
+                    .filter(Property.id == booking.property_id)
+                    .first()
+                )
                 if property_obj and property_obj.owner_id == user_id:
                     authorized_to_pay = True
         else:
             property_to_check = None
             if booking.unit_id:
                 unit = db.query(Unit).filter(Unit.id == booking.unit_id).first()
-                if unit and hasattr(unit, 'property_id') and unit.property_id:
-                    property_to_check = db.query(Property).filter(Property.id == unit.property_id).first()
+                if unit and hasattr(unit, "property_id") and unit.property_id:
+                    property_to_check = (
+                        db.query(Property)
+                        .filter(Property.id == unit.property_id)
+                        .first()
+                    )
             elif booking.property_id:
-                property_to_check = db.query(Property).filter(Property.id == booking.property_id).first()
-            
+                property_to_check = (
+                    db.query(Property)
+                    .filter(Property.id == booking.property_id)
+                    .first()
+                )
+
             if property_to_check and property_to_check.owner_id == user_id:
                 authorized_to_pay = True
 
         if not authorized_to_pay:
-            return not_found_error("User not authorized to make payment for this booking.")
+            return not_found_error(
+                "User not authorized to make payment for this booking."
+            )
 
         if payment_in.invoice_id:
             invoice = (
                 db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
             )
             if not invoice or invoice.booking_id != payment_in.booking_id:
-                return not_found_error("Invalid invoice or invoices does not match booking.")
+                return not_found_error(
+                    "Invalid invoice or invoices does not match booking."
+                )
             if invoice.amount != payment_in.amount:
                 pass
         db_payment = Payment(**payment_in.model_dump(), status=PaymentStatus.PENDING)
@@ -125,16 +140,16 @@ class PaymentService:
             .all()
         )
 
-    def get_payments_by_user(self, db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[Payment]:
-        # Get payments where the user is the tenant
+    def get_payments_by_user(
+        self, db: Session, user_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Payment]:
         tenant_payments = (
             db.query(Payment)
             .join(Payment.booking)
             .filter(Booking.tenant_id == user_id)
             .all()
         )
-        
-        # Get payments where the user is the property owner
+
         owner_payments = (
             db.query(Payment)
             .join(Payment.booking)
@@ -142,7 +157,6 @@ class PaymentService:
             .filter(Property.owner_id == user_id)
             .all()
         )
-        
-        # Combine and limit results
+
         all_payments = tenant_payments + owner_payments
-        return all_payments[skip:skip+limit]
+        return all_payments[skip : skip + limit]

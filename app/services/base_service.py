@@ -23,10 +23,8 @@ class BaseService:
             The created model instance
         """
         if isinstance(obj_in, BaseModel):
-            # If input is a Pydantic schema, create a new SQLAlchemy model
             db_obj = self.model(**obj_in.model_dump())
         else:
-            # If input is already a SQLAlchemy model, use it directly
             db_obj = obj_in
 
         db.add(db_obj)

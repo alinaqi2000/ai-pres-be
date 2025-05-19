@@ -28,7 +28,6 @@ tenant_request_service = TenantRequestService()
 email_service = EmailService()
 
 
-
 @router.post("/create_request", response_model=TenantRequestResponse)
 async def create_request(
     request: TenantRequestCreate,
@@ -107,14 +106,10 @@ async def create_request(
         )
 
         await email_service.send_create_action_email(
-            current_user.email,
-            "Tenant Request",
-            unit_obj.id
+            current_user.email, "Tenant Request", unit_obj.id
         )
 
-        # Create response and set property_id
         response = TenantRequestResponse.model_validate(created_tenant_request)
-        # Ensure property_id is set correctly
         if response.property and not response.property.property_id:
             response.property.property_id = generate_property_id(response.property.id)
         return data_response(response.model_dump(mode="json"))
@@ -135,12 +130,13 @@ async def list_all_requests(
 
     try:
         requests = tenant_request_service.get_all(db, skip, limit)
-        # Create responses and ensure property_ids are set correctly
         responses = []
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(response.property.id)
+                response.property.property_id = generate_property_id(
+                    response.property.id
+                )
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:
@@ -161,7 +157,6 @@ def get_request(
         request = tenant_request_service.get(db, request_id)
         if not request:
             return not_found_error(f"Tenant request with ID {request_id} not found")
-        # Create response and ensure property_id is set correctly
         response = TenantRequestResponse.model_validate(request)
         if response.property and not response.property.property_id:
             response.property.property_id = generate_property_id(response.property.id)
@@ -188,14 +183,14 @@ async def update_request(
 
         if current_user.id == db_obj.property.owner_id:
             updated = tenant_request_service.update(db, db_obj, update_data)
-            # Use the correct method from EmailService
             await email_service.send_update_action_email(
                 current_user.email, "Tenant Request", db_obj.unit_id
             )
-            # Create response and ensure property_id is set correctly
             response = TenantRequestResponse.model_validate(updated)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(response.property.id)
+                response.property.property_id = generate_property_id(
+                    response.property.id
+                )
             return data_response(response.model_dump(mode="json"))
         else:
             return forbidden_error("Not authorized to update this request")
@@ -217,7 +212,6 @@ async def delete_request(
         success = tenant_request_service.delete(db, request_id)
         if not success:
             return not_found_error(f"Tenant request with ID {request_id} not found")
-        # Use the correct method from EmailService
         await email_service.send_delete_action_email(
             current_user.email, "Tenant Request", request_id
         )
@@ -244,12 +238,13 @@ async def get_requests_by_property(
             return not_found_error(f"Property with id {property_id} does not exist.")
 
         requests = tenant_request_service.get_by_property(db, property_id, skip, limit)
-        # Create responses and ensure property_ids are set correctly
         responses = []
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(response.property.id)
+                response.property.property_id = generate_property_id(
+                    response.property.id
+                )
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:
@@ -274,12 +269,13 @@ async def get_requests_by_tenant(
             return not_found_error(f"Tenant with ID {tenant_id} not found")
 
         requests = tenant_request_service.get_by_tenant(db, tenant_id, skip, limit)
-        # Create responses and ensure property_ids are set correctly
         responses = []
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(response.property.id)
+                response.property.property_id = generate_property_id(
+                    response.property.id
+                )
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:

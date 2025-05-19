@@ -81,7 +81,7 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
             {
                 "access_token": token,
                 "token_type": "bearer",
-                "user": UserResponse.from_orm(user),    
+                "user": UserResponse.from_orm(user),
             }
         )
 
@@ -110,7 +110,6 @@ async def create_user_route(
 def get_my_users(db: Session = Depends(get_db), current_user=Depends(owner_required)):
     """Route for owners to get all their tenants"""
     try:
-        # Get only users created by this specific owner
         users = (
             db.query(User)
             .filter(
@@ -144,7 +143,6 @@ def delete_user_by_id(
 ):
     """Route for owners to delete their tenants"""
     try:
-        # Verify this user was created by an owner
         user_to_delete = (
             db.query(User)
             .filter(User.id == user_id, User.booked_by_owner == True)
@@ -176,7 +174,6 @@ def update_user_by_id(
 ):
     """Route for owners to update their tenants"""
     try:
-        # Verify this user was created by an owner
         user_to_update = (
             db.query(User)
             .filter(User.id == user_id, User.booked_by_owner == True)
@@ -203,7 +200,6 @@ async def reset_password(
 ):
     """Route for owners to reset a tenant's password"""
     try:
-        # Verify this user was created by an owner
         user = get_user_by_email(email, db)
         if not user:
             return not_found_error("User not found")
@@ -220,7 +216,6 @@ async def reset_password(
         user.hashed_password = hash_password(new_password)
         db.commit()
 
-        # Send the new password to user's email
         await email_service.send_new_password_email(email, new_password)
 
         return data_response(
@@ -249,4 +244,3 @@ async def update_password(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
-

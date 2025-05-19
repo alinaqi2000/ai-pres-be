@@ -9,6 +9,7 @@ from database.init import get_db
 from services.property_service import PropertyService
 from services.search_history_service import create_search_history
 from schemas.search_history_schema import SearchHistoryCreate
+from schemas.auth_schema import UserMinimumResponse
 from services.floor_service import FloorService
 from services.unit_service import UnitService
 from schemas.property_schema import PropertyCreate, FloorCreate, UnitCreate
@@ -34,7 +35,7 @@ from responses.success import data_response, empty_response
 from utils.dependencies import get_current_user
 from utils import generate_property_id
 import traceback
-from services.email_service import EmailService
+from services.email_service import EmailService, PropertyMatchNotificationService
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -42,6 +43,8 @@ property_service = PropertyService()
 floor_service = FloorService()
 unit_service = UnitService()
 email_service = EmailService()
+notification_service = PropertyMatchNotificationService()
+
 
 
 @router.patch("/{property_id}/publish", response_model=PropertyResponse)
@@ -66,9 +69,7 @@ async def update_property_publish_status(
             db, property_id, is_published
         )
         property_response = PropertyResponse.model_validate(updated_property)
-        # Generate property_id
         property_response.property_id = f"PROP-{updated_property.id:04d}"
-        # Send email notification for property update
         await email_service.send_update_action_email(
             current_user.email, "Property", property_id
         )
@@ -79,6 +80,69 @@ async def update_property_publish_status(
 
 
 # Property Routes
+
+
+@router.get("/search-property", response_model=List[PropertyResponse])
+async def search_properties(
+    name: Optional[str] = None,
+    city: Optional[str] = None,
+    monthly_rent_gt: Optional[float] = None,
+    monthly_rent_lt: Optional[float] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        user_id = (
+            getattr(current_user, "id", None)
+            if isinstance(current_user, User)
+            else None
+        )
+        search_data = SearchHistoryCreate(
+            query_name=name,
+            query_city=city,
+            monthly_rent_gt=monthly_rent_gt,
+            monthly_rent_lt=monthly_rent_lt,
+            user_id=user_id,
+        )
+        create_search_history(db, search_data)
+        query = db.query(property_service.model)
+        if name:
+            query = query.filter(property_service.model.name.ilike(f"%{name}%"))
+        if city:
+            query = query.filter(property_service.model.city.ilike(f"%{city}%"))
+        properties = query.offset(skip).limit(limit).all()
+        property_responses = []
+        for property in properties:
+            match = True
+            if monthly_rent_gt is not None and property.monthly_rent <= monthly_rent_gt:
+                match = False
+            if monthly_rent_lt is not None and property.monthly_rent >= monthly_rent_lt:
+                match = False
+            if match:
+                prop_data = {
+                    "id": property.id,
+                    "property_id": f"PROP-{property.id:04d}",
+                    "name": property.name,
+                    "city": property.city,
+                    "address": property.address,
+                    "description": property.description,
+                    "total_area": property.total_area,
+                    "monthly_rent": property.monthly_rent,
+                    "property_type": property.property_type,
+                    "is_published": property.is_published,
+                    "images": property.images,
+                    "created_at": property.created_at,
+                    "updated_at": property.updated_at,
+                }
+                property_responses.append(prop_data)
+            if property_responses:
+                return data_response(property_responses)
+            return data_response([])
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 
 @router.get("/search", response_model=List[PropertyResponse])
@@ -97,7 +161,6 @@ async def search_properties_and_units(
     Returns properties with units that match the rent criteria.
     """
     try:
-        # Store search history for logged-in users
         user_id = (
             getattr(current_user, "id", None)
             if isinstance(current_user, User)
@@ -111,7 +174,6 @@ async def search_properties_and_units(
             user_id=user_id,
         )
         create_search_history(db, search_data)
-        # Query properties by name/city
         query = db.query(property_service.model)
         if name:
             query = query.filter(property_service.model.name.ilike(f"%{name}%"))
@@ -136,14 +198,16 @@ async def search_properties_and_units(
                     ):
                         match = False
                     if match:
-                        unit_data = UnitMinimumResponse.model_validate(unit).model_dump(mode="json")
+                        unit_data = UnitMinimumResponse.model_validate(unit).model_dump(
+                            mode="json"
+                        )
                         units.append(unit_data)
                 if units:
                     floor_data = {
                         "id": floor.id,
                         "number": floor.number,
                         "name": floor.name,
-                        "units": units
+                        "units": units,
                     }
                     floors.append(floor_data)
             if floors:
@@ -154,7 +218,7 @@ async def search_properties_and_units(
                     "city": property.city,
                     "address": property.address,
                     "property_type": str(property.property_type),
-                    "floors": floors
+                    "floors": floors,
                 }
                 results.append(prop_data)
         return data_response(results)
@@ -163,7 +227,7 @@ async def search_properties_and_units(
         return internal_server_error(str(e))
 
 
-@router.post("/", response_model=PropertyResponse)      
+@router.post("/", response_model=PropertyResponse)
 async def create_property(
     property_in: PropertyCreate,
     db: Session = Depends(get_db),
@@ -175,12 +239,15 @@ async def create_property(
     try:
         property = property_service.create_property(db, current_user.id, property_in)
         property_response = PropertyResponse.model_validate(property)
-        # Generate property_id
         property_response.property_id = f"PROP-{property.id:04d}"
-        # Send email notification for property creation
+        
+        # Send creation notification to owner
         await email_service.send_create_action_email(
             current_user.email, "Property", property.id
         )
+        
+        await notification_service._send_match_notification(db, property, is_property=True)
+        
         return data_response(property_response.model_dump(mode="json"))
     except IntegrityError:
         db.rollback()
@@ -190,7 +257,7 @@ async def create_property(
         return internal_server_error(str(e))
 
 
-@router.get("/", response_model=List[PropertyResponse])
+@router.get("/", response_model=List[PropertyListResponse])
 async def get_properties(
     skip: int = 0,
     limit: int = 100,
@@ -198,75 +265,71 @@ async def get_properties(
     db: Session = Depends(get_db),
 ):
     """Get all published properties"""
+
     try:
         properties = property_service.get_properties(
             db, skip, limit, city, is_published=True
         )
+
         property_responses = []
         for property in properties:
-            property_data = PropertyResponse.model_validate(property)
-            
-            # Generate property_id
-            property_data.property_id = f"PROP-{property.id:04d}"
-            
-            # Get floors with nested units
-            floors = floor_service.get_floors(db, property.id)
-            
-            # Calculate totals for meta field
+            property_data = {
+                "id": property.id,
+                "property_id": f"PROP-{property.id:04d}",
+                "name": property.name,
+                "city": property.city,
+                "address": property.address,
+                "property_type": str(property.property_type),
+                "monthly_rent": property.monthly_rent,
+                "is_published": property.is_published,
+                "created_at": property.created_at,
+                "updated_at": property.updated_at,
+                "meta": {
+                    "total_floors": 0,
+                    "total_units": 0,
+                    "total_unoccupied_units": 0,
+                },
+                "floors": [],
+                "owner": UserMinimumResponse.model_validate(property.owner),
+            }
             total_floors = 0
             total_units = 0
             total_unoccupied_units = 0
-            
+
+            floors = floor_service.get_floors(db, property.id)
             if floors:
-                property_data.floors = []
+                property_data["floors"] = []
                 total_floors = len(floors)
-                
+
                 for floor in floors:
-                    floor_data = FloorMinimumResponse.model_validate(floor)
+                    floor_data = FloorMinimumResponse.model_validate(floor).model_dump(
+                        mode="json"
+                    )
                     units = unit_service.get_units_by_floor(db, floor.id)
-                    
+
                     if units:
-                        floor_data.units = [
-                            UnitMinimumResponse.model_validate(unit) for unit in units
-                        ]
+                        floor_data["units"] = []
                         total_units += len(units)
-                        # Count unoccupied units
+
                         for unit in units:
+                            unit_data = UnitMinimumResponse.model_validate(
+                                unit
+                            ).model_dump(mode="json")
+                            floor_data["units"].append(unit_data)
+
+                            # Count unoccupied units
                             if not unit.is_occupied:
                                 total_unoccupied_units += 1
-                    
-                    property_data.floors.append(floor_data)
-            
-            # Set calculated totals in meta field
-            property_data.meta = {
-                "total_floors": total_floors,
-                "total_units": total_units,
-                "total_unoccupied_units": total_unoccupied_units
-            }
 
-            # Get images
-            thumbnail = (
-                db.query(PropertyImage)
-                .filter(PropertyImage.property_id == property.id)
-                .filter(PropertyImage.is_thumbnail == True)
-                .first()
-            )
-            images = (
-                db.query(PropertyImage)
-                .filter(PropertyImage.property_id == property.id)
-                .all()
-            )
-            if images:
-                property_data.images = [
-                    PropertyImageResponse.model_validate(image) for image in images
-                ]
+                    property_data["floors"].append(floor_data)
 
-            if thumbnail:
-                property_data.thumbnail = PropertyImageResponse.model_validate(
-                    thumbnail
-                )
+            # Update meta data
+            property_data["meta"]["total_floors"] = total_floors
+            property_data["meta"]["total_units"] = total_units
+            property_data["meta"]["total_unoccupied_units"] = total_unoccupied_units
+
             property_responses.append(property_data)
-        return data_response([p.model_dump(mode="json") for p in property_responses])
+        return data_response(property_responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -288,6 +351,7 @@ async def get_my_properties(
         properties = property_service.get_properties(
             db, skip, limit, city, owner_id=current_user.id
         )
+
         property_responses = []
         for property in properties:
             property_data = {
@@ -302,43 +366,44 @@ async def get_my_properties(
                 "created_at": property.created_at,
                 "updated_at": property.updated_at,
                 "meta": {
-                    "total_floors": 0,  
-                    "total_units": 0, 
-                    "total_unoccupied_units": 0 
+                    "total_floors": 0,
+                    "total_units": 0,
+                    "total_unoccupied_units": 0,
                 },
-                "floors": []
+                "floors": [],
+                "owner": UserMinimumResponse.model_validate(property.owner),
             }
             total_floors = 0
             total_units = 0
             total_unoccupied_units = 0
-            
+
             floors = floor_service.get_floors(db, property.id)
             if floors:
                 property_data["floors"] = []
                 total_floors = len(floors)
-                
+
                 for floor in floors:
                     floor_data = FloorMinimumResponse.model_validate(floor).model_dump(
                         mode="json"
                     )
                     units = unit_service.get_units_by_floor(db, floor.id)
-                    
+
                     if units:
                         floor_data["units"] = []
                         total_units += len(units)
-                        
+
                         for unit in units:
-                            unit_data = UnitMinimumResponse.model_validate(unit).model_dump(
-                                mode="json"
-                            )
+                            unit_data = UnitMinimumResponse.model_validate(
+                                unit
+                            ).model_dump(mode="json")
                             floor_data["units"].append(unit_data)
-                            
+
                             # Count unoccupied units
                             if not unit.is_occupied:
                                 total_unoccupied_units += 1
-                    
+
                     property_data["floors"].append(floor_data)
-            
+
             # Update meta data
             property_data["meta"]["total_floors"] = total_floors
             property_data["meta"]["total_units"] = total_units
@@ -357,18 +422,15 @@ async def get_property(property_id: int, db: Session = Depends(get_db)):
         property = property_service.get_property(db, property_id)
         if not property:
             return not_found_error(f"No property found with id {property_id}")
-            
+
         property_response = PropertyResponse.model_validate(property)
-        
-        # Generate property_id
+
         property_response.property_id = f"PROP-{property.id:04d}"
-        
-        # Calculate totals for meta field
+
         total_floors = 0
         total_units = 0
         total_unoccupied_units = 0
-        
-        # Get floors with nested units
+
         floors = floor_service.get_floors(db, property.id)
         if floors:
             total_floors = len(floors)
@@ -380,15 +442,13 @@ async def get_property(property_id: int, db: Session = Depends(get_db)):
                     for unit in units:
                         if not unit.is_occupied:
                             total_unoccupied_units += 1
-        
-        # Create meta field with all totals
+
         property_response.meta = {
             "total_floors": total_floors,
             "total_units": total_units,
-            "total_unoccupied_units": total_unoccupied_units
+            "total_unoccupied_units": total_unoccupied_units,
         }
-        
-        # Get images
+
         thumbnail = (
             db.query(PropertyImage)
             .filter(PropertyImage.property_id == property.id)
@@ -409,7 +469,7 @@ async def get_property(property_id: int, db: Session = Depends(get_db)):
             property_response.thumbnail = PropertyImageResponse.model_validate(
                 thumbnail
             )
-            
+
         return data_response(property_response.model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
@@ -437,9 +497,7 @@ async def update_property(
             db, property_id, property_in
         )
         property_response = PropertyResponse.model_validate(updated_property)
-        # Generate property_id
         property_response.property_id = f"PROP-{updated_property.id:04d}"
-        # Send email notification for property update
         await email_service.send_update_action_email(
             current_user.email, "Property", property_id
         )
@@ -469,7 +527,6 @@ async def delete_property(
             return forbidden_error("Not authorized to delete this property")
 
         if property_service.delete_property(db, property_id):
-            # Send email notification for property deletion
             await email_service.send_delete_action_email(
                 current_user.email, "Property", property_id
             )
@@ -500,7 +557,6 @@ async def create_floor(
 
         floor = floor_service.create_floor(db, property_id, floor_in)
         floor_response = FloorResponse.model_validate(floor)
-        # Send email notification for floor creation
         await email_service.send_create_action_email(
             current_user.email, "Floor", floor.id
         )
@@ -580,7 +636,6 @@ async def get_floor_units(
             return data_response([])
 
         property_response = PropertyMinimumResponse.model_validate(property)
-        # Set property_id if not set
         if not property_response.property_id:
             property_response.property_id = generate_property_id(property_response.id)
         floor_response = FloorMinimumResponse.model_validate(floor)
@@ -616,7 +671,6 @@ async def update_floor(
 
         updated_floor = floor_service.update_floor(db, floor_id, floor_in)
         floor_response = FloorResponse.model_validate(updated_floor)
-        # Send email notification for floor update
         await email_service.send_update_action_email(
             current_user.email, "Floor", floor_id
         )
@@ -647,7 +701,6 @@ async def delete_floor(
             return forbidden_error("Not authorized to delete this floor")
 
         if floor_service.delete_floor(db, floor_id):
-            # Send email notification for floor deletion
             await email_service.send_delete_action_email(
                 current_user.email, "Floor", floor_id
             )
@@ -679,10 +732,15 @@ async def create_unit(
 
         unit = unit_service.create_unit(db, floor_id, property_id, unit_in)
         unit_response = UnitResponse.model_validate(unit)
-        # Send email notification for unit creation
+        
+        # Send creation notification to owner
         await email_service.send_create_action_email(
             current_user.email, "Unit", unit.id
         )
+        
+        # Send notifications to users with matching searches
+        await notification_service._send_match_notification(db, unit, is_property=False)
+        
         return data_response(unit_response.model_dump(mode="json"))
     except IntegrityError:
         db.rollback()
@@ -755,7 +813,6 @@ async def get_available_units(
             return data_response([])
 
         property_response = PropertyMinimumResponse.model_validate(property)
-        # Set property_id if not set
         if not property_response.property_id:
             property_response.property_id = generate_property_id(property_response.id)
         floor_response = FloorMinimumResponse.model_validate(floor)
@@ -794,7 +851,6 @@ async def update_unit(
 
         updated_unit = unit_service.update_unit(db, unit_id, unit_in)
         unit_response = UnitResponse.from_orm(updated_unit)
-        # Send email notification for unit update
         await email_service.send_update_action_email(
             current_user.email, "Unit", unit_id
         )
@@ -828,7 +884,6 @@ async def delete_unit(
             return forbidden_error("Not authorized to delete this unit")
 
         if unit_service.delete_unit(db, unit_id):
-            # Send email notification for unit deletion
             await email_service.send_delete_action_email(
                 current_user.email, "Unit", unit_id
             )

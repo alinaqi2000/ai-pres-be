@@ -16,10 +16,12 @@ from .payment_method_schema import PaymentMethodMinimumResponse
 from .auth_schema import UserMinimumResponse
 from .property_response import PropertyMinimumResponse
 
+
 class BookingResponse(BaseModel):
     id: int
     tenant_request: Optional[TenantRequestMinimumResponse] = None
     tenant: Optional[UserMinimumResponse] = None
+    owner: Optional[UserMinimumResponse] = None
     property: Optional[PropertyMinimumResponse] = None
     booked_by_owner: bool
     status: BookingStatus
@@ -30,21 +32,22 @@ class BookingResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    # def populate_fields(self):
-    #      if self.tenant_request is not None:
-    #         self.tenant = None
-    #         self.property = None
-        
+    def populate_fields(self):
+        if self.booked_by_owner is False:
+            self.tenant = None
+            self.property = None
+
 
 class InvoiceResponse(BaseModel):
     id: int
     tenant: Optional[UserMinimumResponse] = None
+    owner: Optional[UserMinimumResponse] = None
     booking: BookingMinimumResponse
     line_items: List[InvoiceLineItemResponse] = []
     amount: float
     created_at: datetime
     updated_at: Optional[datetime]
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

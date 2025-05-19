@@ -17,3 +17,4 @@ class SearchHistory(Base):
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     user = relationship('User', back_populates='search_histories')
+

@@ -3,7 +3,11 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-from .property_response import PropertyMinimumResponse, FloorMinimumResponse, UnitMinimumResponse
+from .property_response import (
+    PropertyMinimumResponse,
+    FloorMinimumResponse,
+    UnitMinimumResponse,
+)
 
 
 class TenantRequestMinimumResponse(BaseModel):
@@ -29,4 +33,3 @@ class TenantRequestResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
-

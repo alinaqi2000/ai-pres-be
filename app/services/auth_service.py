@@ -5,7 +5,12 @@ from schemas.auth_schema import UserCreate, UserUpdate
 from utils.dependencies import hash_password
 
 
-def create_user(payload: UserCreate, db: Session, created_by_owner: bool = False, owner_id: int = None) -> User:
+def create_user(
+    payload: UserCreate,
+    db: Session,
+    created_by_owner: bool = False,
+    owner_id: int = None,
+) -> User:
     user = User(
         name=payload.name,
         email=payload.email,
@@ -15,8 +20,8 @@ def create_user(payload: UserCreate, db: Session, created_by_owner: bool = False
         nature_of_business=payload.nature_of_business,
         hashed_password=hash_password(payload.password),
         is_active=True,
-        booked_by_owner=created_by_owner,  # Set based on who creates the user
-        created_by_owner_id=owner_id,  # Track which owner created this user
+        booked_by_owner=created_by_owner,
+        created_by_owner_id=owner_id,
     )
     db.add(user)
     db.commit()

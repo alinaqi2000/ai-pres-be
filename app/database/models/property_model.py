@@ -1,13 +1,4 @@
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Float,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Enum,
-)
+from sqlalchemy import (Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum,)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
