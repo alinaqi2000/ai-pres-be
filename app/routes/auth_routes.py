@@ -240,6 +240,10 @@ async def update_password(
         current_user.hashed_password = hash_password(payload.new_password)
         db.commit()
 
+        await email_service.send_new_password_email(
+            current_user.email, payload.new_password
+        )
+
         return data_response({"message": "Password updated successfully"})
     except Exception as e:
         traceback.print_exc()

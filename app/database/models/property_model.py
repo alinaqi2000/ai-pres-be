@@ -28,6 +28,7 @@ class Unit(Base):
         "UnitImage", back_populates="unit", cascade="all, delete-orphan"
     )
     tenant_requests = relationship("TenantRequest", back_populates="unit")
+    property = relationship("Property", back_populates="units")
 
 
 class Floor(Base):

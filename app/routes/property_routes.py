@@ -35,7 +35,7 @@ from responses.success import data_response, empty_response
 from utils.dependencies import get_current_user
 from utils import generate_property_id
 import traceback
-from services.email_service import EmailService, PropertyMatchNotificationService
+from services.email_service import EmailService
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -43,7 +43,6 @@ property_service = PropertyService()
 floor_service = FloorService()
 unit_service = UnitService()
 email_service = EmailService()
-notification_service = PropertyMatchNotificationService()
 
 
 
@@ -80,7 +79,6 @@ async def update_property_publish_status(
 
 
 # Property Routes
-
 
 @router.get("/search-property", response_model=List[PropertyResponse])
 async def search_properties(
@@ -137,13 +135,10 @@ async def search_properties(
                     "updated_at": property.updated_at,
                 }
                 property_responses.append(prop_data)
-            if property_responses:
-                return data_response(property_responses)
-            return data_response([])
+        return data_response(property_responses if property_responses else [])
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
-
 
 @router.get("/search", response_model=List[PropertyResponse])
 async def search_properties_and_units(
@@ -221,11 +216,12 @@ async def search_properties_and_units(
                     "floors": floors,
                 }
                 results.append(prop_data)
-        return data_response(results)
+        if results:
+            return data_response(results)
+        return data_response([])
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
-
 
 @router.post("/", response_model=PropertyResponse)
 async def create_property(
@@ -233,22 +229,22 @@ async def create_property(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Create a new property and notify matching search users"""
     if not isinstance(current_user, User):
         return current_user
 
     try:
+        # Create the property
         property = property_service.create_property(db, current_user.id, property_in)
         property_response = PropertyResponse.model_validate(property)
         property_response.property_id = f"PROP-{property.id:04d}"
         
-        # Send creation notification to owner
         await email_service.send_create_action_email(
             current_user.email, "Property", property.id
         )
         
-        await notification_service._send_match_notification(db, property, is_property=True)
-        
         return data_response(property_response.model_dump(mode="json"))
+        
     except IntegrityError:
         db.rollback()
         return conflict_error("Property with this name already exists")
@@ -737,9 +733,6 @@ async def create_unit(
         await email_service.send_create_action_email(
             current_user.email, "Unit", unit.id
         )
-        
-        # Send notifications to users with matching searches
-        await notification_service._send_match_notification(db, unit, is_property=False)
         
         return data_response(unit_response.model_dump(mode="json"))
     except IntegrityError:

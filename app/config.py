@@ -38,19 +38,7 @@ EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "AI PRES")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
 EMAIL_SERVER = os.getenv("EMAIL_SERVER", "mailhog")
 
-# OpenAI configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-
 # Database URL
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# Update the Settings class with the proper model_config syntax for Pydantic v2
-class Settings(BaseSettings):
-    OPENAI_API_KEY: str = OPENAI_API_KEY
-    
-    model_config = {
-        # Configuration for BaseSettings
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore"
-    }
+
