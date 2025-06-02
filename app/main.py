@@ -36,6 +36,10 @@ os.makedirs(uploads_dir, exist_ok=True)
 
 app.mount(f"/{UPLOAD_DIR}", StaticFiles(directory=uploads_dir), name=UPLOAD_DIR)
 
+# Initialize background tasks scheduler
+from services.background_tasks import BackgroundTasks
+background_tasks = BackgroundTasks()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

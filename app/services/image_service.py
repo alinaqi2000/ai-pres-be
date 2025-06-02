@@ -237,8 +237,8 @@ class ImageService:
             if not property or property.owner_id != current_user.id:
                 raise Exception("You are not authorized to delete this image")
 
-            if image.is_thumbnail:
-                raise Exception("Thumbnail images cannot be deleted")
+            # if image.is_thumbnail:
+            #     raise Exception("Thumbnail images cannot be deleted")
 
             if os.path.exists(image.image_path):
                 os.remove(image.image_path)

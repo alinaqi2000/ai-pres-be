@@ -132,7 +132,7 @@ class BookingService:
         db: Session,
         booking_in: BookingCreate,
         actual_tenant_id: Optional[int],
-        tenant_request_id: Optional[int],
+        tenant_request_id: Optional[int] = None,
         booked_by_owner: bool = False,
     ) -> Optional[Booking]:
         if booking_in.unit_id:
@@ -225,7 +225,6 @@ class BookingService:
             end_date=booking_in.end_date,
             total_price=booking_in.total_price,
             notes=booking_in.notes,
-            tenant_request_id=tenant_request_id,
             booked_by_owner=booked_by_owner,
         )
         db.add(booking)

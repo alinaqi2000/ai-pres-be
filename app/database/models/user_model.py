@@ -12,6 +12,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     cnic = Column(String(16), nullable=True)
     gender = Column(String(10), nullable=True)
+    phone = Column(String(15), nullable=True)
     nature_of_business = Column(String(100), nullable=True)
     hashed_password = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)

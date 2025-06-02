@@ -97,8 +97,10 @@ async def create_user_route(
     current_user=Depends(owner_required),
 ):
     """Route for owners to create tenant users"""
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
-
         user = create_user(payload, db, created_by_owner=True, owner_id=current_user.id)
         return data_response(UserResponse.from_orm(user))
     except Exception as e:
@@ -109,6 +111,9 @@ async def create_user_route(
 @router.get("/my-users", response_model=ResponseModel)
 def get_my_users(db: Session = Depends(get_db), current_user=Depends(owner_required)):
     """Route for owners to get all their tenants"""
+    if not isinstance(current_user, User):
+        return current_user
+
     try:
         users = (
             db.query(User)
@@ -137,57 +142,65 @@ def get_user(db: Session = Depends(get_db), current_user=Depends(get_current_use
         return internal_server_error(f"Failed to fetch user: {str(e)}")
 
 
-@router.delete("/user/{user_id}", response_model=ResponseModel)
-def delete_user_by_id(
-    user_id: int, db: Session = Depends(get_db), current_user=Depends(owner_required)
+@router.delete("/delete-user/{user_id}", response_model=ResponseModel)
+async def delete_user_route(
+    user_id: int, 
+    db: Session = Depends(get_db), 
+    current_user=Depends(owner_required)
 ):
-    """Route for owners to delete their tenants"""
+    """Route for owners to delete tenant users"""
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
+        # Verify the user belongs to the current owner
         user_to_delete = (
             db.query(User)
-            .filter(User.id == user_id, User.booked_by_owner == True)
+            .filter(
+                User.id == user_id, 
+                User.booked_by_owner == True,
+                User.created_by_owner_id == current_user.id
+            )
             .first()
         )
 
         if not user_to_delete:
-            return forbidden_error(
-                "You can only delete users that were created by property owners"
-            )
+            return forbidden_error("You can only delete users that were created by you")
 
-        user = delete_user(user_id, db)
-        if not user:
-            return not_found_error(f"No user found with id {user_id}")
-        return data_response(
-            {"message": f"User with id {user_id} deleted successfully"}
-        )
+        delete_user(user_id, db)
+        return data_response({"message": f"User with id {user_id} deleted successfully"})
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(f"Failed to delete user: {str(e)}")
 
 
-@router.patch("/user/{user_id}", response_model=Union[ResponseModel, UserUpdate])
-def update_user_by_id(
+@router.put("/update-user/{user_id}", response_model=ResponseModel)
+async def update_user_route(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(owner_required),
 ):
-    """Route for owners to update their tenants"""
+    """Route for owners to update tenant users"""
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
+        # Verify the user belongs to the current owner
         user_to_update = (
             db.query(User)
-            .filter(User.id == user_id, User.booked_by_owner == True)
+            .filter(
+                User.id == user_id, 
+                User.booked_by_owner == True,
+                User.created_by_owner_id == current_user.id
+            )
             .first()
         )
-
+        
         if not user_to_update:
-            return forbidden_error(
-                "You can only update users that were created by property owners"
-            )
-
+            return forbidden_error("You can only update users that were created by you")
+        
         user = update_user(user_id, payload, db)
-        if not user:
-            return not_found_error(f"No user found with id {user_id}")
         return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()

@@ -74,3 +74,6 @@ class Property(Base):
         "TenantRequest", back_populates="property", cascade="all, delete-orphan"
     )
     owner = relationship("User")
+    units = relationship(
+        "Unit", back_populates="property", cascade="all, delete-orphan"
+    )

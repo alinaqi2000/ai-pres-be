@@ -112,7 +112,7 @@ async def get_bookings_for_property(
         return internal_server_error(str(e))
 
 
-@router.get("/my_bookings", response_model=List[BookingResponse])
+@router.get("/my-bookings", response_model=List[BookingResponse])
 async def get_my_bookings(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -143,6 +143,28 @@ async def get_my_bookings(
         traceback.print_exc()
         return internal_server_error(str(e))
 
+
+@router.get("/tenant-bookings/{tenant_id}", response_model=List[BookingResponse])
+async def get_tenant_bookings(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+    try:
+        bookings = db.query(Booking).filter(Booking.tenant_id == tenant_id).all()
+
+        formatted_bookings = []
+        for booking in bookings:
+            response = BookingResponse.model_validate(booking)
+            response = set_booking_response_data(response, booking, db)
+            formatted_bookings.append(response.model_dump(mode="json"))
+
+        return data_response(formatted_bookings)
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 @router.get("/property_owner", response_model=List[BookingResponse])
 async def get_property_owner_bookings(
@@ -472,54 +494,54 @@ async def create_bookings(
             booking_in.property_id = property_obj.id
             booking_in.floor_id = floor.id
 
-            tenant_request = None
-            if booking_in.tenant_request_id:
-                tenant_request = tenant_request_service.get_tenant_request_by_id(
-                    db, booking_in.tenant_request_id
-                )
-                if not tenant_request:
-                    return not_found_error(
-                        f"Tenant request with ID {booking_in.tenant_request_id} not found."
-                    )
-                if tenant_request.tenant_id != current_user.id:
-                    return forbidden_error(
-                        "Not authorized: Tenant request does not belong to you."
-                    )
-                if tenant_request.unit_id != booking_in.unit_id:
-                    return conflict_error(
-                        "Tenant request unit ID does not match the booking unit ID."
-                    )
-                if tenant_request.status != "accepted":
-                    return conflict_error(
-                        f"Tenant request {booking_in.tenant_request_id} has not been accepted. Current status: {tenant_request.status}"
-                    )
-            else:
-                tenant_request = (
-                    db.query(TenantRequest)
-                    .filter(
-                        TenantRequest.tenant_id == current_user.id,
-                        TenantRequest.unit_id == booking_in.unit_id,
-                        TenantRequest.status == "accepted",
-                    )
-                    .order_by(TenantRequest.created_at.desc())
-                    .first()
-                )
-                if not tenant_request:
-                    return conflict_error(
-                        "No accepted tenant request found for this unit. Please create a tenant request or specify an accepted tenant_request_id."
-                    )
+            # tenant_request = None
+            # if booking_in.tenant_request_id:
+            #     tenant_request = tenant_request_service.get_tenant_request_by_id(
+            #         db, booking_in.tenant_request_id
+            #     )
+            #     if not tenant_request:
+            #         return not_found_error(
+            #             f"Tenant request with ID {booking_in.tenant_request_id} not found."
+            #         )
+            #     if tenant_request.tenant_id != current_user.id:
+            #         return forbidden_error(
+            #             "Not authorized: Tenant request does not belong to you."
+            #         )
+            #     if tenant_request.unit_id != booking_in.unit_id:
+            #         return conflict_error(
+            #             "Tenant request unit ID does not match the booking unit ID."
+            #         )
+            #     if tenant_request.status != "accepted":
+            #         return conflict_error(
+            #             f"Tenant request {booking_in.tenant_request_id} has not been accepted. Current status: {tenant_request.status}"
+            #         )
+            # else:
+            #     tenant_request = (
+            #         db.query(TenantRequest)
+            #         .filter(
+            #             TenantRequest.tenant_id == current_user.id,
+            #             TenantRequest.unit_id == booking_in.unit_id,
+            #             TenantRequest.status == "accepted",
+            #         )
+            #         .order_by(TenantRequest.created_at.desc())
+            #         .first()
+            #     )
+            #     if not tenant_request:
+            #         return conflict_error(
+            #             "No accepted tenant request found for this unit. Please create a tenant request or specify an accepted tenant_request_id."
+            #         )
 
-            if property_obj.owner_id == current_user.id:
-                return forbidden_error(
-                    "Owners cannot create bookings via the tenant flow for their own properties. Please use the owner booking flow (provide property_id, no unit_id/floor_id)."
-                )
+            # if property_obj.owner_id == current_user.id:
+            #     return forbidden_error(
+            #         "Owners cannot create bookings via the tenant flow for their own properties. Please use the owner booking flow (provide property_id, no unit_id/floor_id)."
+            #     )
             created_booking = booking_service.create(
                 db,
                 booking_in,
                 actual_tenant_id=None,
-                tenant_request_id=tenant_request.id,
                 booked_by_owner=False,
             )
+            print(created_booking)
             if not created_booking:
                 return conflict_error(
                     "Could not create booking. Unit might be unavailable for new dates or request invalid."

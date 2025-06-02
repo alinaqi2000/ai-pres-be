@@ -16,6 +16,7 @@ def create_user(
         email=payload.email,
         city=payload.city,
         cnic=payload.cnic,
+        phone=payload.phone,
         gender=payload.gender,
         nature_of_business=payload.nature_of_business,
         hashed_password=hash_password(payload.password),
@@ -34,16 +35,11 @@ def get_user_by_email(email: str, db: Session):
 
 
 def get_user_by_id(user_id: int, db: Session):
-    return (
-        db.query(User)
-        .options(joinedload(User.roles))
-        .filter(User.id == user_id)
-        .first()
-    )
+    return db.query(User).filter(User.id == user_id).first()
 
 
 def get_all_users(db: Session):
-    return db.query(User).options(joinedload(User.roles)).all()
+    return db.query(User).all()
 
 
 def update_user(user_id: int, payload: UserUpdate, db: Session):
@@ -58,6 +54,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session):
         user.email = payload.email
     if payload.cnic is not None:
         user.cnic = payload.cnic
+    if payload.phone is not None:
+        user.phone = payload.phone
     if payload.gender is not None:
         user.gender = payload.gender
     if payload.nature_of_business is not None:
@@ -71,7 +69,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session):
 
 
 def delete_user(user_id: int, db: Session):
-    user = get_user_by_id(user_id, db)
+    # Query user directly without using joinedload for roles
+    user = db.query(User).filter(User.id == user_id).first()
     if user:
         db.delete(user)
         db.commit()

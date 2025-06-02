@@ -36,6 +36,7 @@ from utils.dependencies import get_current_user
 from utils import generate_property_id
 import traceback
 from services.email_service import EmailService
+from services.property_recommendation_service import PropertyRecommendationSystem
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -43,7 +44,58 @@ property_service = PropertyService()
 floor_service = FloorService()
 unit_service = UnitService()
 email_service = EmailService()
+property_recommendation_system = PropertyRecommendationSystem()
 
+# Initialize the recommendation system when the app starts
+@router.on_event("startup")
+async def initialize_recommendation_system():
+    try:
+        db = next(get_db())
+        property_recommendation_system.train_model(db)
+    except Exception as e:
+        print(f"Error initializing recommendation system: {str(e)}")
+
+@router.get("/train_model", response_model=PropertyResponse)
+async def update_property_publish_status(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Update the publish status of a property"""
+    if not isinstance(current_user, User):
+        return current_user
+    try:
+        property_recommendation_system.train_model(db)
+        return data_response("Model trained successfully")
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+@router.get("/recommendations", response_model=PropertyResponse)
+async def get_property_recommendations(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Get property recommendations based on user search history"""
+    if not isinstance(current_user, User):
+        return current_user
+    try:
+        # Convert to dictionary
+        property_data = {
+            'id': 1,
+            'name': 'Updated Luxury Apartment',
+            'city': 'sargodha',
+            'property_type': 'BUILDING',
+            'description': 'Updated description for the luxury apartment',
+            'monthly_rent': 600,
+            'is_published': False
+        }
+        
+        # Get recommendations using the initialized system
+        users_to_notify = property_recommendation_system.match_property_with_searches(property_data)
+        return data_response(users_to_notify)
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 
 @router.patch("/{property_id}/publish", response_model=PropertyResponse)
@@ -100,8 +152,8 @@ async def search_properties(
         search_data = SearchHistoryCreate(
             query_name=name,
             query_city=city,
-            monthly_rent_gt=monthly_rent_gt,
-            monthly_rent_lt=monthly_rent_lt,
+            monthly_rent_gt=float(monthly_rent_gt) if monthly_rent_gt else None,
+            monthly_rent_lt=float(monthly_rent_lt) if monthly_rent_lt else None,
             user_id=user_id,
         )
         create_search_history(db, search_data)
@@ -324,7 +376,14 @@ async def get_properties(
             property_data["meta"]["total_units"] = total_units
             property_data["meta"]["total_unoccupied_units"] = total_unoccupied_units
 
-            property_responses.append(property_data)
+        search_data = SearchHistoryCreate(
+            query_city=city,
+            monthly_rent_gt=monthly_rent_gt,
+            monthly_rent_lt=monthly_rent_lt,
+            user_id=user_id,
+        )
+        create_search_history(db, search_data)
+        property_responses.append(property_data)
         return data_response(property_responses)
     except Exception as e:
         traceback.print_exc()
@@ -357,10 +416,14 @@ async def get_my_properties(
                 "city": property.city,
                 "address": property.address,
                 "property_type": str(property.property_type),
+                "description": property.description,
+                "total_area": property.total_area,
                 "monthly_rent": property.monthly_rent,
                 "is_published": property.is_published,
                 "created_at": property.created_at,
                 "updated_at": property.updated_at,
+                "thumbnail": None,
+                "images": [],
                 "meta": {
                     "total_floors": 0,
                     "total_units": 0,
@@ -372,7 +435,12 @@ async def get_my_properties(
             total_floors = 0
             total_units = 0
             total_unoccupied_units = 0
-
+            if property.images:
+                for image in property.images:
+                    if image.is_thumbnail:
+                        property_data["thumbnail"] = PropertyImageResponse.model_validate(image).model_dump(mode="json")
+                    else:
+                        property_data["images"].append(PropertyImageResponse.model_validate(image).model_dump(mode="json"))
             floors = floor_service.get_floors(db, property.id)
             if floors:
                 property_data["floors"] = []
@@ -590,7 +658,7 @@ async def get_floors(
                 "created_at": floor.created_at,
                 "updated_at": floor.updated_at,
                 "total": len(unit_responses),
-                "items": [u.model_dump(mode="json") for u in unit_responses],
+                "units": [u.model_dump(mode="json") for u in unit_responses],
             }
             floor_responses.append(floor_data)
 
@@ -631,17 +699,18 @@ async def get_floor_units(
         if not unit_responses:
             return data_response([])
 
-        property_response = PropertyMinimumResponse.model_validate(property)
-        if not property_response.property_id:
-            property_response.property_id = generate_property_id(property_response.id)
-        floor_response = FloorMinimumResponse.model_validate(floor)
-        unit_response = unit_responses[0]
+        responses = []
+        for unit_response in unit_responses:
+            property_response = PropertyMinimumResponse.model_validate(property)
+            if not property_response.property_id:
+                property_response.property_id = generate_property_id(property_response.id)
+            floor_response = FloorMinimumResponse.model_validate(floor)
+            unit = unit_response.model_dump(mode="json")
+            unit['floor'] = floor_response
+            unit['property'] = property_response
+            responses.append(unit)
 
-        response_data = unit_response.model_dump(mode="json")
-        response_data["floor"] = floor_response.model_dump(mode="json")
-        response_data["property"] = property_response.model_dump(mode="json")
-
-        return data_response(response_data)
+        return data_response(responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

@@ -32,6 +32,8 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 # Upload configuration
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
 # Email configuration
 EMAIL_FROM = os.getenv("EMAIL_FROM", "no-reply@ai-pres.com")
 EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "AI PRES")

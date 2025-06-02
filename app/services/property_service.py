@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from database.models import Property as PropertyModel
 from schemas.property_schema import PropertyCreate, Property
 from services.base_service import BaseService
-
+from sqlalchemy import func
 
 class PropertyService(BaseService):
     def __init__(self):
@@ -29,7 +29,7 @@ class PropertyService(BaseService):
     ) -> List[Property]:
         query = db.query(self.model).options(joinedload(self.model.owner))
         if city:
-            query = query.filter(self.model.city == city)
+            query = query.filter(func.lower(self.model.city).like(f"%{city.lower()}%"))
         if is_published is not None:
             query = query.filter(self.model.is_published == is_published)
         if owner_id is not None:

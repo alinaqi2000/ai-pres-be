@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     city: str
+    phone: Optional[str] = None
     cnic: Optional[str] = None
     gender: Optional[str] = None
     nature_of_business: Optional[str] = None    
@@ -29,6 +30,7 @@ class Token(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     cnic: Optional[str] = None
     city: Optional[str] = None
     gender: Optional[str] = None
@@ -39,6 +41,7 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: str
+    phone: Optional[str] = None
     city: Optional[str] = None
     cnic: Optional[str] = None
     gender: Optional[str] = None
@@ -60,6 +63,7 @@ class UserMinimumResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+    phone: Optional[str] = None
     city: str
 
     class Config:
