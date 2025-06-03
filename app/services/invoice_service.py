@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session, joinedload
-from typing import List
+from typing import List, Optional
 from sqlalchemy import or_
 from fastapi import HTTPException
 from database.models import Invoice, Booking, Property, User, InvoiceLineItem
-from schemas.invoice_schema import InvoiceCreate, InvoiceUpdate
+from schemas.invoice_schema import InvoiceCreate, InvoiceUpdate, InvoiceLineItemCreate
+from datetime import timedelta
 
 
 class InvoiceService:
@@ -37,7 +38,6 @@ class InvoiceService:
         return query.offset(skip).limit(limit).all()
 
     def create(self, db: Session, invoice_in: InvoiceCreate) -> Invoice:
-        # Check if the booking exists
         booking = db.query(Booking).filter(Booking.id == invoice_in.booking_id).first()
         if not booking:
             raise HTTPException(
@@ -98,3 +98,44 @@ class InvoiceService:
             db.delete(db_invoice)
             db.commit()
         return db_invoice
+
+    def create_invoice_from_booking(self, db: Session, booking: Booking) -> Optional[Invoice]:
+        """Create an invoice automatically when a booking is confirmed"""
+        try:
+            # Create line item for booking
+            line_item = InvoiceLineItemCreate(
+                description=f"Booking payment for {booking.start_date.date()} to {booking.end_date.date()}",
+                amount=booking.total_price,
+                quantity=1
+            )
+
+            # Set due date to 7 days before booking start
+            due_date = booking.start_date - timedelta(weeks=4)
+
+            # Create invoice data
+            invoice_data = InvoiceCreate(
+                booking_id=booking.id,
+                due_date=due_date,
+                status="pending",
+                line_items=[line_item]
+            )
+
+            return self.create(db, invoice_data)
+        except Exception as e:
+            print(f"Error creating invoice from booking: {str(e)}")
+            return None
+
+    def get_tenant_invoices(self, db: Session, tenant_id: int, property_owner_id: int) -> List[Invoice]:
+        """Get all invoices for a specific tenant, only accessible by property owner"""
+        return (
+            db.query(self.model)
+            .join(Invoice.booking)
+            .join(Booking.property)
+            .filter(
+                Booking.tenant_id == tenant_id,
+                Property.owner_id == property_owner_id
+            )
+            .options(joinedload(self.model.line_items))
+            .all()
+        )
+

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import joinedload
 from typing import List
 import traceback
 import asyncio
@@ -15,17 +14,18 @@ from schemas.property_response import (
     UnitMinimumResponse,
 )
 from services.invoice_service import InvoiceService
+from services.booking_service import BookingService
 from utils.dependencies import get_current_user
 from utils import generate_property_id
 from responses.error import not_found_error, internal_server_error, forbidden_error
-from responses.success import data_response, empty_response
+from responses.success import data_response
 from schemas.auth_schema import UserMinimumResponse
 from services.email_service import EmailService
 
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 invoice_service = InvoiceService()
-
+booking_service = BookingService()
 
 def format_invoice_response(db, invoice):
     """
@@ -205,6 +205,38 @@ def read_invoice(
 
     response = format_invoice_response(db, db_invoice)
     return data_response(response.model_dump(mode="json"))
+
+
+
+@router.get("/tenant/{tenant_id}/invoices", response_model=List[InvoiceResponse])
+async def get_tenant_invoices(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Get all invoices for a specific tenant. Only accessible by property owners."""
+    if not isinstance(current_user, User):
+        return current_user
+
+    try:
+        if not booking_service.is_property_owner(db, current_user.id):
+            return forbidden_error("Only property owners can access this endpoint")
+
+        invoices = invoice_service.get_tenant_invoices(
+            db, tenant_id, current_user.id
+        )
+        
+        # Format each invoice response
+        formatted_invoices = []
+        for invoice in invoices:
+            response = format_invoice_response(db, invoice)
+            formatted_invoices.append(response.model_dump(mode="json"))
+        
+        return data_response(formatted_invoices)
+
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 
 @router.patch("/{invoice_id}", response_model=InvoiceResponse)

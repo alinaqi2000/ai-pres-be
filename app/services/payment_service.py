@@ -19,57 +19,40 @@ class PaymentService:
     def create_payment(
         self, db: Session, payment_in: PaymentCreate, user_id: int
     ) -> Payment:
-        booking = db.query(Booking).filter(Booking.id == payment_in.booking_id).first()
+        if not payment_in.invoice_id:
+            return not_found_error("Invoice ID is required.")
+
+        invoice = db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
+        if not invoice:
+            return not_found_error("Invalid invoice ID.")
+
+        # Get booking and check authorization
+        booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
         if not booking:
-            return not_found_error("Invalid booking ID.")
+            return not_found_error("Invoice has no associated booking.")
 
+        # Check if user is authorized
         authorized_to_pay = False
-
-        if booking.tenant_id:
-            if booking.booked_by_owner and booking.property_id:
-                property_obj = (
-                    db.query(Property)
-                    .filter(Property.id == booking.property_id)
-                    .first()
-                )
-                if property_obj and property_obj.owner_id == user_id:
-                    authorized_to_pay = True
-        else:
-            property_to_check = None
-            if booking.unit_id:
-                unit = db.query(Unit).filter(Unit.id == booking.unit_id).first()
-                if unit and hasattr(unit, "property_id") and unit.property_id:
-                    property_to_check = (
-                        db.query(Property)
-                        .filter(Property.id == unit.property_id)
-                        .first()
-                    )
-            elif booking.property_id:
-                property_to_check = (
-                    db.query(Property)
-                    .filter(Property.id == booking.property_id)
-                    .first()
-                )
-
-            if property_to_check and property_to_check.owner_id == user_id:
+        if booking.tenant_id == user_id:
+            authorized_to_pay = True
+        elif booking.property_id:
+            property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+            if property_obj and property_obj.owner_id == user_id:
                 authorized_to_pay = True
 
         if not authorized_to_pay:
-            return not_found_error(
-                "User not authorized to make payment for this booking."
-            )
+            return not_found_error("User not authorized to make payment for this invoice.")
 
-        if payment_in.invoice_id:
-            invoice = (
-                db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
-            )
-            if not invoice or invoice.booking_id != payment_in.booking_id:
-                return not_found_error(
-                    "Invalid invoice or invoices does not match booking."
-                )
-            if invoice.amount != payment_in.amount:
-                pass
-        db_payment = Payment(**payment_in.model_dump(), status=PaymentStatus.PENDING)
+        # Validate payment amount matches invoice
+        if invoice.amount != payment_in.amount:
+            return not_found_error("Payment amount must match invoice amount.")
+
+        # Create payment with booking_id from invoice
+        db_payment = Payment(
+            **payment_in.model_dump(),
+            booking_id=invoice.booking_id,
+            status=PaymentStatus.PENDING
+        )
         db.add(db_payment)
         db.commit()
         db.refresh(db_payment)
@@ -94,15 +77,11 @@ class PaymentService:
             booking = (
                 db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
             )
-            if booking:
-                if (
-                    booking.status == BookingStatus.PENDING_PAYMENT
-                    or booking.status == BookingStatus.PENDING
-                ):
-                    booking.status = BookingStatus.CONFIRMED
-                    booking.updated_at = datetime.now()
-                    db.commit()
-                    db.refresh(booking)
+            if booking and booking.status == BookingStatus.PENDING:
+                booking.status = BookingStatus.CONFIRMED
+                booking.updated_at = datetime.now()
+                db.commit()
+                db.refresh(booking)
         elif db_payment.status == PaymentStatus.FAILED:
             booking = (
                 db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
@@ -111,7 +90,7 @@ class PaymentService:
                 BookingStatus.CANCELLED,
                 BookingStatus.COMPLETED,
             ]:
-                booking.status = BookingStatus.PAYMENT_FAILED
+                booking.status = BookingStatus.PENDING
                 booking.updated_at = datetime.now()
                 db.commit()
                 db.refresh(booking)

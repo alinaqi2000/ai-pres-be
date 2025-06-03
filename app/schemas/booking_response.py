@@ -15,27 +15,27 @@ from .invoice_schema import InvoiceMinimumResponse
 from .payment_method_schema import PaymentMethodMinimumResponse
 from .auth_schema import UserMinimumResponse
 from .property_response import PropertyMinimumResponse
+from .property_response import FloorMinimumResponse
+from .property_response import UnitMinimumResponse
 
 
 class BookingResponse(BaseModel):
     id: int
-    tenant_request: Optional[TenantRequestMinimumResponse] = None
     tenant: Optional[UserMinimumResponse] = None
     owner: Optional[UserMinimumResponse] = None
     property: Optional[PropertyMinimumResponse] = None
+    floor: Optional[FloorMinimumResponse] = None  # Will be populated for tenant request bookings
+    unit: Optional[UnitMinimumResponse] = None# Will be populated for tenant request bookings
     booked_by_owner: bool
     status: BookingStatus
     created_at: datetime
-    start_date: datetime
+    start_date: datetime        
     end_date: datetime
     updated_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    total_price: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
-
-    def populate_fields(self):
-        if self.booked_by_owner is False:
-            self.tenant = None
-            self.property = None
 
 
 class InvoiceResponse(BaseModel):

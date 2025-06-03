@@ -10,8 +10,10 @@ from schemas.tenant_request_schema import (
 )
 from schemas.tenant_request_response import TenantRequestResponse
 from services.tenant_request_service import TenantRequestService
+from services.booking_service import BookingService
 from utils.dependencies import get_current_user, get_db
 from utils import generate_property_id
+from utils.id_generator import generate_unit_id
 from responses.success import data_response, empty_response
 from responses.error import (
     not_found_error,
@@ -25,6 +27,7 @@ from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/tenant_requests", tags=["Tenant Requests"])
 tenant_request_service = TenantRequestService()
+booking_service = BookingService()
 email_service = EmailService()
 
 
@@ -38,6 +41,11 @@ async def create_request(
         return current_user
 
     try:
+        if booking_service.is_property_already_booked(db, request.property_id):
+            return conflict_error(
+                "This property is currently booked and not available for tenant requests."
+            )
+
         existing = tenant_request_service.check_existing_request(
             db, current_user.id, request
         )
@@ -88,8 +96,10 @@ async def create_request(
             tenant_id=current_user.id,
             owner_id=property_obj.owner_id,
             message=request.message,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            monthly_offer=request.monthly_offer,
             preferred_move_in=request.preferred_move_in,
-            duration_months=request.duration_months,
         )
 
         existing_request = tenant_request_service.check_existing_request(
@@ -112,6 +122,8 @@ async def create_request(
         response = TenantRequestResponse.model_validate(created_tenant_request)
         if response.property and not response.property.property_id:
             response.property.property_id = generate_property_id(response.property.id)
+        if response.unit:
+            response.unit.unit_id = generate_unit_id(response.unit.id)
         return data_response(response.model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
@@ -134,9 +146,9 @@ async def list_all_requests(
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(
-                    response.property.id
-                )
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:
@@ -160,16 +172,18 @@ def get_request(
         response = TenantRequestResponse.model_validate(request)
         if response.property and not response.property.property_id:
             response.property.property_id = generate_property_id(response.property.id)
+        if response.unit:
+            response.unit.unit_id = generate_unit_id(response.unit.id)
         return data_response(response.model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.patch("/{request_id}", response_model=TenantRequestResponse)
+@router.patch("/{request_id}", response_model=TenantRequestUpdate)
 async def update_request(
     request_id: int,
-    update_data: TenantRequestUpdate,
+    update_data: TenantRequestUpdate, 
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -182,16 +196,36 @@ async def update_request(
             return not_found_error(f"Tenant request with ID {request_id} not found")
 
         if current_user.id == db_obj.property.owner_id:
-            updated = tenant_request_service.update(db, db_obj, update_data)
-            await email_service.send_update_action_email(
-                current_user.email, "Tenant Request", db_obj.unit_id
+            response_data = TenantRequestUpdate(
+                status=update_data.status if update_data.status else db_obj.status,
+                is_seen=update_data.is_seen if update_data.is_seen is not None else db_obj.is_seen
             )
-            response = TenantRequestResponse.model_validate(updated)
-            if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(
-                    response.property.id
+
+            updated = False
+            if update_data.status:
+                updated = await tenant_request_service.update_status(
+                    db=db,
+                    request_id=request_id,
+                    new_status=update_data.status,
+                    user_id=current_user.id
                 )
-            return data_response(response.model_dump(mode="json"))
+
+            if update_data.is_seen is not None:
+                db_obj.is_seen = update_data.is_seen
+                db.commit()
+                db.refresh(db_obj)
+                updated = True
+                if not update_data.status:
+                    await email_service.send_update_action_email(
+                        current_user.email,
+                        "Tenant Request Seen",
+                        db_obj.unit_id
+                    )
+
+            if updated:
+                return data_response(response_data.model_dump(mode="json"))
+            
+            return not_found_error("No updates were made")
         else:
             return forbidden_error("Not authorized to update this request")
     except Exception as e:
@@ -242,9 +276,9 @@ async def get_requests_by_property(
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(
-                    response.property.id
-                )
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:
@@ -273,9 +307,9 @@ async def get_requests_by_tenant(
         for r in requests:
             response = TenantRequestResponse.model_validate(r)
             if response.property and not response.property.property_id:
-                response.property.property_id = generate_property_id(
-                    response.property.id
-                )
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
             responses.append(response.model_dump(mode="json"))
         return data_response(responses)
     except Exception as e:

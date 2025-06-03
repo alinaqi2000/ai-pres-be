@@ -52,23 +52,21 @@ The Support Team""",
         )
         await self.mailer.send_message(message)
 
-    async def send_create_action_email(self, email: str, entity: str, entity_id: int):
-        message = MessageSchema(
-            subject=f"✅ {entity} Created Successfully - #{entity_id}",
-            recipients=[email],
-            body=f"""Hello,
-
-Great news! Your new {entity.lower()} (ID: {entity_id}) has been created successfully.
-
-You can now access and manage this {entity.lower()} from your dashboard. If you have any questions or need assistance, our support team is always ready to help.
-
-Thank you for using our service!
-
-Best regards,
-The Support Team""",
-            subtype="plain",
-        )
-        await self.mailer.send_message(message)
+    async def send_create_action_email(
+        self, 
+        email: str, 
+        entity_type: str, 
+        entity_id: int, 
+        additional_message: str = None
+    ):
+        """Send email notification for entity creation"""
+        subject = f"New {entity_type} Created"
+        content = f"A new {entity_type} with ID {entity_id} has been created."
+        
+        if additional_message:
+            content += f"\n\n{additional_message}"
+            
+        await self.send_email(email, subject, content)
 
     async def send_update_action_email(self, email: str, entity: str, entity_id: int):
         message = MessageSchema(

@@ -15,7 +15,10 @@ class TenantRequestMinimumResponse(BaseModel):
     property: PropertyMinimumResponse
     floor: FloorMinimumResponse
     unit: UnitMinimumResponse
+    start_date: datetime
+    end_date: datetime
     monthly_offer: Optional[int] = None
+
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,6 +30,9 @@ class TenantRequestResponse(BaseModel):
     property: PropertyMinimumResponse
     floor: FloorMinimumResponse
     unit: UnitMinimumResponse
+    start_date: datetime
+    end_date: datetime
+    monthly_offer: Optional[int] = None
     status: str
     is_seen: bool
     created_at: datetime

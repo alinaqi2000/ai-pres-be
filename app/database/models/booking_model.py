@@ -18,7 +18,7 @@ class Booking(Base):
     booked_by_owner = Column(Boolean, default=False)
 
     start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
     total_price = Column(Float, nullable=False)
     status = Column(String(50), default=BookingStatus.PENDING.value, nullable=False)
     notes = Column(Text, nullable=True)  

@@ -51,3 +51,13 @@ class UnitService(BaseService):
 
     def delete_unit(self, db: Session, unit_id: int) -> bool:
         return self.delete(db, unit_id)
+
+
+    def get_all_available_units(
+        self, db: Session
+    ) -> List[Unit]:
+        query = (
+            db.query(self.model)
+            .filter(self.model.is_occupied == False)
+        )
+        return query.all()

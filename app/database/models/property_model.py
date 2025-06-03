@@ -1,9 +1,19 @@
-from sqlalchemy import (Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Enum,)
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Enum,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.init import Base
 from enums.unit_type import UnitType
 from enums.property_type import PropertyType
+from datetime import datetime, timezone
 
 
 class Unit(Base):
@@ -63,6 +73,7 @@ class Property(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    is_occupied = Column(Boolean, default=False)
 
     floors = relationship(
         "Floor", back_populates="property", cascade="all, delete-orphan"
@@ -77,3 +88,5 @@ class Property(Base):
     units = relationship(
         "Unit", back_populates="property", cascade="all, delete-orphan"
     )
+    bookings = relationship("Booking", back_populates="property")
+

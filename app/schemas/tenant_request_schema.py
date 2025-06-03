@@ -12,7 +12,8 @@ class TenantRequestBase(BaseModel):
     message: str = None
     preferred_move_in: Optional[datetime] = None
     monthly_offer: Optional[int] = None
-    duration_months: Optional[int] = None
+    start_date: datetime
+    end_date: Optional[datetime] = None
     contact_method: Optional[str] = None
 
 
@@ -23,3 +24,4 @@ class TenantRequestCreate(TenantRequestBase):
 class TenantRequestUpdate(BaseModel):
     status: Optional[str] = None
     is_seen: Optional[bool] = None
+            

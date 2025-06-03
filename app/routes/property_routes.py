@@ -10,6 +10,7 @@ from services.property_service import PropertyService
 from services.search_history_service import create_search_history
 from schemas.search_history_schema import SearchHistoryCreate
 from schemas.auth_schema import UserMinimumResponse
+from schemas.property_response import ItemsResponse
 from services.floor_service import FloorService
 from services.unit_service import UnitService
 from schemas.property_schema import PropertyCreate, FloorCreate, UnitCreate
@@ -34,6 +35,7 @@ from responses.error import (
 from responses.success import data_response, empty_response
 from utils.dependencies import get_current_user
 from utils import generate_property_id
+from utils.id_generator import generate_unit_id
 import traceback
 from services.email_service import EmailService
 from services.property_recommendation_service import PropertyRecommendationSystem
@@ -46,6 +48,7 @@ unit_service = UnitService()
 email_service = EmailService()
 property_recommendation_system = PropertyRecommendationSystem()
 
+
 # Initialize the recommendation system when the app starts
 @router.on_event("startup")
 async def initialize_recommendation_system():
@@ -54,6 +57,7 @@ async def initialize_recommendation_system():
         property_recommendation_system.train_model(db)
     except Exception as e:
         print(f"Error initializing recommendation system: {str(e)}")
+
 
 @router.get("/train_model", response_model=PropertyResponse)
 async def update_property_publish_status(
@@ -70,6 +74,7 @@ async def update_property_publish_status(
         traceback.print_exc()
         return internal_server_error(str(e))
 
+
 @router.get("/recommendations", response_model=PropertyResponse)
 async def get_property_recommendations(
     db: Session = Depends(get_db),
@@ -81,17 +86,19 @@ async def get_property_recommendations(
     try:
         # Convert to dictionary
         property_data = {
-            'id': 1,
-            'name': 'Updated Luxury Apartment',
-            'city': 'sargodha',
-            'property_type': 'BUILDING',
-            'description': 'Updated description for the luxury apartment',
-            'monthly_rent': 600,
-            'is_published': False
+            "id": 1,
+            "name": "Updated Luxury Apartment",
+            "city": "sargodha",
+            "property_type": "BUILDING",
+            "description": "Updated description for the luxury apartment",
+            "monthly_rent": 600,
+            "is_published": False,
         }
-        
+
         # Get recommendations using the initialized system
-        users_to_notify = property_recommendation_system.match_property_with_searches(property_data)
+        users_to_notify = property_recommendation_system.match_property_with_searches(
+            property_data
+        )
         return data_response(users_to_notify)
     except Exception as e:
         traceback.print_exc()
@@ -131,6 +138,7 @@ async def update_property_publish_status(
 
 
 # Property Routes
+
 
 @router.get("/search-property", response_model=List[PropertyResponse])
 async def search_properties(
@@ -182,6 +190,7 @@ async def search_properties(
                     "monthly_rent": property.monthly_rent,
                     "property_type": property.property_type,
                     "is_published": property.is_published,
+                    "is_occupied": property.is_occupied,
                     "images": property.images,
                     "created_at": property.created_at,
                     "updated_at": property.updated_at,
@@ -191,6 +200,7 @@ async def search_properties(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
+
 
 @router.get("/search", response_model=List[PropertyResponse])
 async def search_properties_and_units(
@@ -248,6 +258,8 @@ async def search_properties_and_units(
                         unit_data = UnitMinimumResponse.model_validate(unit).model_dump(
                             mode="json"
                         )
+                        # Add unit_id to response
+                        unit_data["unit_id"] = generate_unit_id(unit.id)
                         units.append(unit_data)
                 if units:
                     floor_data = {
@@ -275,6 +287,7 @@ async def search_properties_and_units(
         traceback.print_exc()
         return internal_server_error(str(e))
 
+
 @router.post("/", response_model=PropertyResponse)
 async def create_property(
     property_in: PropertyCreate,
@@ -290,13 +303,13 @@ async def create_property(
         property = property_service.create_property(db, current_user.id, property_in)
         property_response = PropertyResponse.model_validate(property)
         property_response.property_id = f"PROP-{property.id:04d}"
-        
+
         await email_service.send_create_action_email(
             current_user.email, "Property", property.id
         )
-        
+
         return data_response(property_response.model_dump(mode="json"))
-        
+
     except IntegrityError:
         db.rollback()
         return conflict_error("Property with this name already exists")
@@ -330,6 +343,7 @@ async def get_properties(
                 "property_type": str(property.property_type),
                 "monthly_rent": property.monthly_rent,
                 "is_published": property.is_published,
+                "is_occupied": property.is_occupied,
                 "created_at": property.created_at,
                 "updated_at": property.updated_at,
                 "meta": {
@@ -363,6 +377,8 @@ async def get_properties(
                             unit_data = UnitMinimumResponse.model_validate(
                                 unit
                             ).model_dump(mode="json")
+                            # Add unit_id to response
+                            unit_data["unit_id"] = generate_unit_id(unit.id)
                             floor_data["units"].append(unit_data)
 
                             # Count unoccupied units
@@ -420,6 +436,7 @@ async def get_my_properties(
                 "total_area": property.total_area,
                 "monthly_rent": property.monthly_rent,
                 "is_published": property.is_published,
+                "is_occupied": property.is_occupied,
                 "created_at": property.created_at,
                 "updated_at": property.updated_at,
                 "thumbnail": None,
@@ -438,9 +455,17 @@ async def get_my_properties(
             if property.images:
                 for image in property.images:
                     if image.is_thumbnail:
-                        property_data["thumbnail"] = PropertyImageResponse.model_validate(image).model_dump(mode="json")
+                        property_data["thumbnail"] = (
+                            PropertyImageResponse.model_validate(image).model_dump(
+                                mode="json"
+                            )
+                        )
                     else:
-                        property_data["images"].append(PropertyImageResponse.model_validate(image).model_dump(mode="json"))
+                        property_data["images"].append(
+                            PropertyImageResponse.model_validate(image).model_dump(
+                                mode="json"
+                            )
+                        )
             floors = floor_service.get_floors(db, property.id)
             if floors:
                 property_data["floors"] = []
@@ -460,6 +485,8 @@ async def get_my_properties(
                             unit_data = UnitMinimumResponse.model_validate(
                                 unit
                             ).model_dump(mode="json")
+                            # Add unit_id to response
+                            unit_data["unit_id"] = generate_unit_id(unit.id)
                             floor_data["units"].append(unit_data)
 
                             # Count unoccupied units
@@ -490,6 +517,9 @@ async def get_property(property_id: int, db: Session = Depends(get_db)):
         property_response = PropertyResponse.model_validate(property)
 
         property_response.property_id = f"PROP-{property.id:04d}"
+        property_response.is_occupied = property_service.calculate_occupation_status(
+            db, property
+        )
 
         total_floors = 0
         total_units = 0
@@ -689,11 +719,11 @@ async def get_floor_units(
 
         for unit in units:
             unit_data = UnitResponse.model_validate(unit)
+            # Add unit_id to response
+            unit_data.unit_id = generate_unit_id(unit.id)
             images = db.query(UnitImage).filter(UnitImage.unit_id == unit.id).all()
             if images:
-                unit_data.images = [
-                    UnitImageResponse.model_validate(image) for image in images
-                ]
+                unit_data.images = [UnitImageResponse.model_validate(image) for image in images]
             unit_responses.append(unit_data)
 
         if not unit_responses:
@@ -703,11 +733,15 @@ async def get_floor_units(
         for unit_response in unit_responses:
             property_response = PropertyMinimumResponse.model_validate(property)
             if not property_response.property_id:
-                property_response.property_id = generate_property_id(property_response.id)
+                property_response.property_id = generate_property_id(
+                    property_response.id
+                )
             floor_response = FloorMinimumResponse.model_validate(floor)
             unit = unit_response.model_dump(mode="json")
-            unit['floor'] = floor_response
-            unit['property'] = property_response
+            # Ensure unit_id is included in the response
+            unit["unit_id"] = generate_unit_id(unit_response.id)
+            unit["floor"] = floor_response
+            unit["property"] = property_response
             responses.append(unit)
 
         return data_response(responses)
@@ -715,6 +749,47 @@ async def get_floor_units(
         traceback.print_exc()
         return internal_server_error(str(e))
 
+
+
+@router.get("/properties-and-units/available", response_model=List[ItemsResponse])
+async def get_available_properties_and_units(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Get all available properties and units for booking.
+    """
+    if not isinstance(current_user, User):
+        return current_user
+
+    try:
+        properties = property_service.get_properties(
+            db, 
+          is_occupied=False,
+        )
+        units = unit_service.get_all_available_units(
+            db, 
+        )
+        items= [
+                {
+                    "items": PropertyMinimumResponse.model_validate(property).model_dump(mode="json"),
+                    "type": "property"
+                }
+                for property in properties
+        ]
+        items.extend(
+            {
+                "items": UnitMinimumResponse.model_validate(units).model_dump(mode="json"),
+                "type": "unit"
+            }
+            for units in units
+        )
+        if not items:
+            return data_response([])
+        return data_response(items)
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
 
 @router.put("/{property_id}/floors/{floor_id}", response_model=FloorResponse)
 async def update_floor(
@@ -797,12 +872,12 @@ async def create_unit(
 
         unit = unit_service.create_unit(db, floor_id, property_id, unit_in)
         unit_response = UnitResponse.model_validate(unit)
-        
-        # Send creation notification to owner
+        # Add unit_id to response
+        unit_response.unit_id = generate_unit_id(unit.id)
+
         await email_service.send_create_action_email(
             current_user.email, "Unit", unit.id
         )
-        
         return data_response(unit_response.model_dump(mode="json"))
     except IntegrityError:
         db.rollback()
@@ -822,18 +897,19 @@ async def get_unit(
 ):
     try:
         units = unit_service.get_units_by_floor(db, floor_id, skip, limit)
-        unit_response = []
+        unit_responses = []
 
         for unit in units:
             unit_data = UnitResponse.model_validate(unit)
+            # Add unit_id to response
+            unit_data.unit_id = generate_unit_id(unit.id)
+            
             images = db.query(UnitImage).filter(UnitImage.unit_id == unit.id).all()
             if images:
-                unit_data.images = [
-                    UnitImageResponse.model_validate(image) for image in images
-                ]
-            unit_response.append(unit_data)
+                unit_data.images = [UnitImageResponse.model_validate(image) for image in images]
+            unit_responses.append(unit_data)
 
-        return data_response([u.model_dump(mode="json") for u in unit_response])
+        return data_response([u.model_dump(mode="json") for u in unit_responses])
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -841,7 +917,7 @@ async def get_unit(
 
 @router.get(
     "/{property_id}/floors/{floor_id}/available_units",
-    response_model=UnitListResponse,
+    response_model=List[UnitResponse],
 )
 async def get_available_units(
     property_id: int,
@@ -860,31 +936,34 @@ async def get_available_units(
             return not_found_error("Property not found")
 
         my_units = unit_service.get_available_units(db, floor_id, skip, limit)
-        unit_responses = []
+        responses = []
 
         for unit in my_units:
             unit_data = UnitResponse.model_validate(unit)
+            unit_data.unit_id = generate_unit_id(unit.id)
+
+            # Add images if any
             images = db.query(UnitImage).filter(UnitImage.unit_id == unit.id).all()
             if images:
                 unit_data.images = [
                     UnitImageResponse.model_validate(image) for image in images
                 ]
-            unit_responses.append(unit_data)
 
-        if not unit_responses:
-            return data_response([])
+            # Add property and floor information
+            property_response = PropertyMinimumResponse.model_validate(property)
+            if not property_response.property_id:
+                property_response.property_id = generate_property_id(
+                    property_response.id
+                )
+            floor_response = FloorMinimumResponse.model_validate(floor)
 
-        property_response = PropertyMinimumResponse.model_validate(property)
-        if not property_response.property_id:
-            property_response.property_id = generate_property_id(property_response.id)
-        floor_response = FloorMinimumResponse.model_validate(floor)
-        unit_response = unit_responses[0]
+            response_data = unit_data.model_dump(mode="json")
+            response_data["floor"] = floor_response.model_dump(mode="json")
+            response_data["property"] = property_response.model_dump(mode="json")
 
-        response_data = unit_response.model_dump(mode="json")
-        response_data["floor"] = floor_response.model_dump(mode="json")
-        response_data["property"] = property_response.model_dump(mode="json")
+            responses.append(response_data)
 
-        return data_response(response_data)
+        return data_response(responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

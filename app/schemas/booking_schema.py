@@ -13,7 +13,7 @@ class BookingBase(BaseModel):
     floor_id: Optional[int] = None
     unit_id: Optional[int] = None
     start_date: datetime
-    end_date: datetime
+    end_date: Optional[datetime] = None
     total_price: float
     notes: Optional[str] = None
 
@@ -40,7 +40,7 @@ class BookingPropertyResponse(BaseModel):
     name: str
     city: str
     address: str
-    property_type: PropertyType
+    property_type: PropertyType 
 
     model_config = ConfigDict(from_attributes=True)
 

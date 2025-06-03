@@ -1,5 +1,5 @@
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict
+from typing import List, Optional, Dict, Any ,Union, Literal
+from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
 from .image_response import PropertyImageResponse, UnitImageResponse
 from enums.unit_type import UnitType
@@ -9,6 +9,7 @@ from .auth_schema import UserMinimumResponse
 
 class UnitMinimumResponse(BaseModel):
     id: int
+    unit_id: Optional[str] = None
     name: str
     unit_type: UnitType
     monthly_rent: float
@@ -24,10 +25,9 @@ class FloorMinimumResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class PropertyMinimumResponse(BaseModel):
     id: int
-    property_id: Optional[str] = None  
+    property_id: Optional[str] = None
     name: str
     city: str
     address: str
@@ -35,10 +35,11 @@ class PropertyMinimumResponse(BaseModel):
     monthly_rent: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
-
+    
 
 class UnitResponse(BaseModel):
     id: int
+    unit_id: Optional[str] = None
     name: str
     unit_type: UnitType
     area: float
@@ -82,6 +83,12 @@ class FloorListResponse(FloorResponse):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ItemsResponse(BaseModel):
+    item: Union[PropertyMinimumResponse, UnitMinimumResponse]
+    type: Literal["property", "unit"]
+
+    model_config = ConfigDict(from_attributes=True)
+
 class PropertyResponse(BaseModel):
     id: int
     property_id: Optional[str] = None
@@ -94,6 +101,7 @@ class PropertyResponse(BaseModel):
     meta: Optional[Dict[str, Any]] = None
     property_type: PropertyType
     is_published: bool
+    is_occupied: bool    
     thumbnail: Optional[PropertyImageResponse] = None
     images: Optional[List[PropertyImageResponse]] = []
     owner: UserMinimumResponse
