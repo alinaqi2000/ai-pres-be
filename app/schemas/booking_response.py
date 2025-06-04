@@ -30,7 +30,7 @@ class BookingResponse(BaseModel):
     status: BookingStatus
     created_at: datetime
     start_date: datetime        
-    end_date: datetime
+    end_date: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     notes: Optional[str] = None
     total_price: Optional[float] = None

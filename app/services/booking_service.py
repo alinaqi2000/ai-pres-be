@@ -127,40 +127,45 @@ class BookingService:
         db: Session,
         property_id: int,
         start_date: datetime,
-        end_date: datetime,
+        end_date: Optional[datetime] = None,
         exclude_booking_id: Optional[int] = None,
     ) -> bool:
         """
         Check if any unit in the property is occupied during the given time period
         Returns True if occupied, False if available
         """
-        # Get all units for the property
-        units = db.query(Unit).filter(Unit.property_id == property_id).all()
-        if not units:
+        property = db.query(Property).filter(Property.id == property_id).first()
+        if not property:
             return False
 
+        return property.is_occupied == True
+        # Get all units for the property
+        # units = db.query(Unit).filter(Unit.property_id == property_id).all()
+        # if not units:
+        #     return False
+
         # Check if any unit has a booking in the given time period
-        for unit in units:
-            query = db.query(Booking).filter(
-                Booking.unit_id == unit.id,
-                Booking.status.in_(
-                    [
-                        BookingStatus.PENDING,
-                        BookingStatus.CONFIRMED,
-                        BookingStatus.ACTIVE,
-                    ]
-                ),
-                Booking.start_date < end_date,
-                Booking.end_date > start_date,
-            )
+        # for unit in units:
+        #     query = db.query(Booking).filter(
+        #         Booking.unit_id == unit.id,
+        #         Booking.status.in_(
+        #             [
+        #                 BookingStatus.PENDING,
+        #                 BookingStatus.CONFIRMED,
+        #                 BookingStatus.ACTIVE,
+        #             ]
+        #         ),
+        #         end_date and Booking.start_date < end_date,
+        #         end_date and Booking.end_date > start_date,
+        #     )
 
-            if exclude_booking_id:
-                query = query.filter(Booking.id != exclude_booking_id)
+        #     if exclude_booking_id is not None:
+        #         query = query.filter(Booking.id != exclude_booking_id)
 
-            if query.first():
-                return True
+        #     if query.first():
+        #         return True
 
-        return False
+        # return False
 
     def is_property_fully_occupied(
         self, db: Session, property_id: int, start_date: datetime, end_date: datetime
@@ -197,7 +202,7 @@ class BookingService:
                 print(
                     f"INFO: Unit {booking_in.unit_id} is not available for the requested period"
                 )
-                return None
+                return "Unit is not available for the requested period"
         # For whole property booking
         elif booking_in.property_id:
             if self.is_property_occupied(
@@ -206,19 +211,19 @@ class BookingService:
                 print(
                     f"INFO: Property {booking_in.property_id} has occupied units for the requested period"
                 )
-                return None
+                return f"Property has occupied units for the requested period"
 
-            if booked_by_owner and actual_tenant_id:
+            if booked_by_owner and actual_tenant_id is not None:
                 try:
                     self.check_existing_booking(
                         db, actual_tenant_id, booking_in.property_id
                     )
                 except ValueError as e:
                     print(f"INFO: {str(e)}")
-                    return None
+                    return str(e)
         else:
             print("ERROR: Neither unit_id nor property_id provided")
-            return None
+            return "Neither unit_id nor property_id provided"
 
         # Create the booking
         booking = Booking(
@@ -235,7 +240,25 @@ class BookingService:
         db.add(booking)
         db.commit()
         db.refresh(booking)
+
+        if booking_in.unit_id:
+            self.update_unit_occupancy(db, booking_in.unit_id, True)
+        elif booking_in.property_id:
+            self.update_property_occupancy(db, booking_in.property_id, True)
+        
         return booking
+
+    def update_unit_occupancy(self, db: Session, unit_id: int, is_occupied: bool):
+        unit = db.query(Unit).filter(Unit.id == unit_id).first()
+        if unit:
+            unit.is_occupied = is_occupied
+            db.commit()
+
+    def update_property_occupancy(self, db: Session, property_id: int, is_occupied: bool):
+        property = db.query(Property).filter(Property.id == property_id).first()
+        if property:
+            property.is_occupied = is_occupied
+            db.commit()
 
     async def update(
         self, db: Session, booking_id: int, booking_in: BookingUpdate, is_owner: bool

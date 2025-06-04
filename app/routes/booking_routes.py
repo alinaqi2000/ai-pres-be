@@ -371,11 +371,12 @@ async def create_bookings(
             tenant_request_id=None,
             booked_by_owner=is_owner,
         )
+        
+        if isinstance(created_booking, str):
+            return conflict_error(created_booking)
 
         if not created_booking:
-            return conflict_error(
-                "Could not create booking. Property/Unit might be unavailable."
-            )
+            return conflict_error("Could not create booking.")
 
         if current_user.email:
             await email_service.send_create_action_email(

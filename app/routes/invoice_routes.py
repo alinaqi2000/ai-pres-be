@@ -144,7 +144,7 @@ async def create_invoice(
         return internal_server_error(str(e))
 
 
-@router.get("/my_invoices", response_model=List[InvoiceResponse])
+@router.get("/my-invoices", response_model=List[InvoiceResponse])
 def read_invoices(
     skip: int = 0,
     limit: int = 100,

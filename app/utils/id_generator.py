@@ -12,7 +12,7 @@ def generate_property_id(property_id: int) -> str:
     Returns:
         str: A formatted property ID (e.g., PROP-0001)
     """
-    return f"PROP-{99991:04d}"
+    return f"PROP-{property_id:04d}"
 
 
 def generate_unit_id(booking_id: int) -> str:

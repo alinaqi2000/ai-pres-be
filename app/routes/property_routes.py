@@ -770,16 +770,23 @@ async def get_available_properties_and_units(
         units = unit_service.get_all_available_units(
             db, 
         )
-        items= [
-                {
-                    "items": PropertyMinimumResponse.model_validate(property).model_dump(mode="json"),
+        items = []
+        for property in properties:
+            property_response = PropertyMinimumResponse.model_validate(property)
+            if not property_response.property_id:
+                property_response.property_id = generate_property_id(
+                    property_response.id
+                )
+            items.append(
+                  {
+                    "item": property_response.model_dump(mode="json"),
                     "type": "property"
                 }
-                for property in properties
-        ]
+            )
+  
         items.extend(
             {
-                "items": UnitMinimumResponse.model_validate(units).model_dump(mode="json"),
+                "item": UnitMinimumResponse.model_validate(units).model_dump(mode="json"),
                 "type": "unit"
             }
             for units in units
