@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from database.models.booking_model import Booking
 from database.models import Property, Unit, Floor
@@ -10,11 +10,16 @@ from schemas.booking_schema import BookingCreate, BookingUpdate
 from enums.booking_status import BookingStatus
 from database.models.tenant_request_model import TenantRequest
 from schemas.booking_response import BookingResponse
-from schemas.property_response import PropertyMinimumResponse, FloorMinimumResponse, UnitMinimumResponse
+from schemas.property_response import (
+    PropertyMinimumResponse,
+    FloorMinimumResponse,
+    UnitMinimumResponse,
+)
 from schemas.auth_schema import UserMinimumResponse
 from utils.id_generator import generate_property_id, generate_unit_id
 from services.invoice_service import InvoiceService
 from services.email_service import EmailService
+from responses.error import bad_request_error
 
 
 class BookingService:
@@ -33,11 +38,7 @@ class BookingService:
 
     def get_by_tenant(self, db: Session, tenant_id: int) -> List[Booking]:
         """Get all bookings related to the specific tenant (both owner-created and tenant-requested)"""
-        return (
-            db.query(Booking)
-            .filter(Booking.tenant_id == tenant_id)
-            .all()
-        )
+        return db.query(Booking).filter(Booking.tenant_id == tenant_id).all()
 
     def get_my_bookings(self, db: Session, user_id: int) -> List[Booking]:
         """Get all bookings for properties owned by user"""
@@ -64,20 +65,13 @@ class BookingService:
         return (
             db.query(Booking)
             .join(Property)
-            .filter(
-                Property.owner_id == owner_id,
-                Booking.booked_by_owner == True
-            )
+            .filter(Property.owner_id == owner_id, Booking.booked_by_owner == True)
             .all()
         )
 
     def get_by_property(self, db: Session, property_id: int) -> List[Booking]:
         """Get all bookings for a property (both tenant requests and owner created)"""
-        return (
-            db.query(Booking)
-            .filter(Booking.property_id == property_id)
-            .all()
-        )
+        return db.query(Booking).filter(Booking.property_id == property_id).all()
 
     # def get_owner_property_bookings(self, db: Session, owner_id: int) -> List[Booking]:
     #     """Get all bookings for properties owned by the user"""
@@ -194,6 +188,24 @@ class BookingService:
         tenant_request_id: Optional[int] = None,
         booked_by_owner: bool = False,
     ) -> Optional[Booking]:
+
+        # Add date validation
+        current_date = datetime.now(timezone.utc)
+        start_date = booking_in.start_date.replace(tzinfo=timezone.utc)
+
+        if booking_in.end_date:
+            end_date = booking_in.end_date.replace(tzinfo=timezone.utc)
+            min_duration = timedelta(days=30)
+            if end_date - start_date < min_duration:
+                return "Booking duration must be at least 30 days."
+            status = (
+                BookingStatus.CLOSED.value
+                if end_date < current_date
+                else BookingStatus.ACTIVE.value
+            )
+        else:
+            status = BookingStatus.ACTIVE.value
+
         # For single unit booking
         if booking_in.unit_id:
             if not self.is_unit_available(
@@ -225,6 +237,9 @@ class BookingService:
             print("ERROR: Neither unit_id nor property_id provided")
             return "Neither unit_id nor property_id provided"
 
+        # Set the status before creating booking
+        booking_in.status = status
+
         # Create the booking
         booking = Booking(
             tenant_id=actual_tenant_id,
@@ -236,6 +251,7 @@ class BookingService:
             total_price=booking_in.total_price,
             notes=booking_in.notes,
             booked_by_owner=booked_by_owner,
+            status=status,  # Add status here
         )
         db.add(booking)
         db.commit()
@@ -245,7 +261,7 @@ class BookingService:
             self.update_unit_occupancy(db, booking_in.unit_id, True)
         elif booking_in.property_id:
             self.update_property_occupancy(db, booking_in.property_id, True)
-        
+
         return booking
 
     def update_unit_occupancy(self, db: Session, unit_id: int, is_occupied: bool):
@@ -254,7 +270,9 @@ class BookingService:
             unit.is_occupied = is_occupied
             db.commit()
 
-    def update_property_occupancy(self, db: Session, property_id: int, is_occupied: bool):
+    def update_property_occupancy(
+        self, db: Session, property_id: int, is_occupied: bool
+    ):
         property = db.query(Property).filter(Property.id == property_id).first()
         if property:
             property.is_occupied = is_occupied
@@ -277,7 +295,11 @@ class BookingService:
                 new_end = update_data.get("end_date", db_booking.end_date)
 
                 if db_booking.unit_id and not self.is_unit_available(
-                    db, db_booking.unit_id, new_start, new_end, exclude_booking_id=booking_id
+                    db,
+                    db_booking.unit_id,
+                    new_start,
+                    new_end,
+                    exclude_booking_id=booking_id,
                 ):
                     print("Date update failed: Unit not available for selected dates")
                     return None
@@ -286,23 +308,25 @@ class BookingService:
                 new_status = BookingStatus(update_data["status"])
                 current_status = BookingStatus(db_booking.status)
 
-                if not is_owner or \
-                   current_status != BookingStatus.PENDING or \
-                   new_status != BookingStatus.CONFIRMED:
+                if (
+                    not is_owner
+                    or current_status != BookingStatus.PENDING
+                    or new_status != BookingStatus.CONFIRMED
+                ):
                     return None
 
                 if new_status == BookingStatus.CONFIRMED:
                     try:
-                        invoice = self.invoice_service.create_invoice_from_booking(db, db_booking)
+                        invoice = self.invoice_service.create_invoice_from_booking(
+                            db, db_booking
+                        )
                         if not invoice:
                             return None
-                        
+
                         # Send invoice creation email to tenant
                         if db_booking.tenant and db_booking.tenant.email:
                             await self.email_service.send_create_action_email(
-                                db_booking.tenant.email,
-                                "Invoice",
-                                invoice.id
+                                db_booking.tenant.email, "Invoice", invoice.id
                             )
                     except Exception as e:
                         print(f"Invoice creation failed: {str(e)}")
@@ -321,7 +345,6 @@ class BookingService:
             print(f"Update failed: {str(e)}")
             db.rollback()
             return None
-
 
     def delete(
         self, db: Session, booking_id: int, user_id: int, is_owner: bool
@@ -358,11 +381,14 @@ class BookingService:
             db_booking = self.get(db, booking_id)
             if not db_booking:
                 return None
-            
+
             if not is_owner:
                 return None
-            
-            if new_status == BookingStatus.CONFIRMED or new_status == BookingStatus.PENDING:
+
+            if (
+                new_status == BookingStatus.CONFIRMED
+                or new_status == BookingStatus.PENDING
+            ):
                 db_booking.status = new_status.value
                 db_booking.updated_at = datetime.now(timezone.utc)
                 db.commit()
@@ -371,28 +397,28 @@ class BookingService:
                 tenant = db.query(User).filter(User.id == db_booking.tenant_id).first()
                 if tenant and tenant.email:
                     await self.email_service.send_update_action_email(
-                        tenant.email,
-                        "Booking Status",
-                        booking_id
+                        tenant.email, "Booking Status", booking_id
                     )
 
                 try:
-                    invoice = self.invoice_service.create_invoice_from_booking(db, db_booking)
+                    invoice = self.invoice_service.create_invoice_from_booking(
+                        db, db_booking
+                    )
                     if not invoice:
                         db.rollback()
                         return None
-                        
-                    tenant = db.query(User).filter(User.id == db_booking.tenant_id).first()
+
+                    tenant = (
+                        db.query(User).filter(User.id == db_booking.tenant_id).first()
+                    )
                     if tenant and tenant.email:
                         await self.email_service.send_create_action_email(
-                            tenant.email,
-                            "Invoice",
-                            invoice.id
+                            tenant.email, "Invoice", invoice.id
                         )
                 except Exception as e:
                     db.rollback()
                     return None
-                
+
                 return db_booking
 
             return None
@@ -448,12 +474,15 @@ class BookingService:
         response_dict["id"] = booking.id
         response_dict["tenant"] = (
             UserMinimumResponse.model_validate(booking.tenant).model_dump()
-            if booking.tenant else None
+            if booking.tenant
+            else None
         )
 
         # Add property and owner info
         if not property_obj:
-            property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+            property_obj = (
+                db.query(Property).filter(Property.id == booking.property_id).first()
+            )
 
         if property_obj:
             prop_response = PropertyMinimumResponse.model_validate(property_obj)
@@ -465,13 +494,16 @@ class BookingService:
             owner = db.query(User).filter(User.id == property_obj.owner_id).first()
             response_dict["owner"] = (
                 UserMinimumResponse.model_validate(owner).model_dump()
-                if owner else None
+                if owner
+                else None
             )
 
         # Add floor and unit info for tenant requests
         if not booking.booked_by_owner:
             if booking.floor:
-                response_dict["floor"] = FloorMinimumResponse.model_validate(booking.floor).model_dump()
+                response_dict["floor"] = FloorMinimumResponse.model_validate(
+                    booking.floor
+                ).model_dump()
 
             if booking.unit:
                 unit_response = UnitMinimumResponse.model_validate(booking.unit)
@@ -582,9 +614,7 @@ class BookingService:
         )
 
     def create_booking_from_tenant_request(
-        self,
-        db: Session,
-        tenant_request: TenantRequest
+        self, db: Session, tenant_request: TenantRequest
     ) -> Optional[Booking]:
         """Create a booking automatically from an accepted tenant request"""
         try:
@@ -598,8 +628,8 @@ class BookingService:
                 start_date=tenant_request.start_date,
                 end_date=tenant_request.end_date,
                 total_price=tenant_request.monthly_offer,
-                status='pending',
-                notes=f"Auto-created from tenant request {tenant_request.id}"
+                status="pending",
+                notes=f"Auto-created from tenant request {tenant_request.id}",
             )
 
             return self.create(
@@ -607,19 +637,28 @@ class BookingService:
                 booking_in=booking_data,
                 actual_tenant_id=tenant_request.tenant_id,
                 tenant_request_id=tenant_request.id,
-                booked_by_owner=False
+                booked_by_owner=False,
             )
         except Exception as e:
-            print(f"Error creating booking from tenant request {tenant_request.id}: {str(e)}")
+            print(
+                f"Error creating booking from tenant request {tenant_request.id}: {str(e)}"
+            )
             return None
 
     def is_property_already_booked(self, db: Session, property_id: int) -> bool:
         """Check if property has any active bookings"""
-        return db.query(Booking).filter(
-            Booking.property_id == property_id,
-            Booking.status.in_([
-                BookingStatus.PENDING,
-                BookingStatus.CONFIRMED,
-                BookingStatus.ACTIVE
-            ])
-        ).first() is not None
+        return (
+            db.query(Booking)
+            .filter(
+                Booking.property_id == property_id,
+                Booking.status.in_(
+                    [
+                        BookingStatus.PENDING,
+                        BookingStatus.CONFIRMED,
+                        BookingStatus.ACTIVE,
+                    ]
+                ),
+            )
+            .first()
+            is not None
+        )

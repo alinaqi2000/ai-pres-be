@@ -21,7 +21,7 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     tenant_id: Optional[int] = None
     tenant_request_id: Optional[int] = None
-
+    status: Optional[BookingStatus] = None
 
 class BookingUpdate(BaseModel):
     start_date: Optional[datetime] = None

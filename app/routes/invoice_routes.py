@@ -26,6 +26,7 @@ from services.email_service import EmailService
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 invoice_service = InvoiceService()
 booking_service = BookingService()
+email_service = EmailService()
 
 def format_invoice_response(db, invoice):
     """
@@ -279,6 +280,50 @@ async def update_invoice(
             )
 
         return data_response(response.model_dump(mode="json"))
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+
+@router.post("/create-from-booking/{booking_id}", response_model=InvoiceResponse)
+async def create_invoice_from_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create an invoice directly from a booking ID"""
+    if not isinstance(current_user, User):
+        return current_user
+    
+    try:
+        # Get the booking
+        booking = booking_service.get_booking(db, booking_id)
+        if not booking:
+            return not_found_error(f"Booking with ID {booking_id} not found")
+            
+        # Verify ownership
+        property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+        if not property_obj or property_obj.owner_id != current_user.id:
+            return forbidden_error("Not authorized to create invoice for this booking")
+        
+        # Create invoice using booking data
+        created_invoice = invoice_service.create_invoice_from_booking(db, booking)
+        if not created_invoice:
+            return internal_server_error("Failed to create invoice from booking")
+        
+        # Format response
+        response = format_invoice_response(db, created_invoice)
+        
+        # Send email notification   
+        if current_user.email:
+            asyncio.create_task(    
+                email_service.send_create_action_email(
+                    current_user.email, "Invoice", created_invoice.id
+                )
+            )
+            
+        return data_response(response.model_dump(mode="json"))
+        
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

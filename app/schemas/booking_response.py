@@ -44,6 +44,8 @@ class InvoiceResponse(BaseModel):
     owner: Optional[UserMinimumResponse] = None
     booking: BookingMinimumResponse
     line_items: List[InvoiceLineItemResponse] = []
+    reference_number: str
+    month: datetime
     amount: float
     created_at: datetime
     updated_at: Optional[datetime]

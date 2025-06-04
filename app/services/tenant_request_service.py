@@ -9,6 +9,7 @@ from schemas.tenant_request_response import TenantRequestResponse
 from utils.id_generator import generate_property_id, generate_unit_id
 from datetime import datetime, timezone
 from database.models.booking_model import Booking
+from enums.tenant_request_status import TenantRequestStatus
 
 class TenantRequestService:
     def __init__(self):
@@ -127,7 +128,7 @@ class TenantRequestService:
             if not tenant_request:
                 return None
 
-            if new_status == 'accepted':
+            if new_status == TenantRequestStatus.ACCEPTED.value:
                 tenant_request.status = new_status
                 tenant_request.updated_at = datetime.now(timezone.utc)
                 db.commit()
@@ -151,11 +152,23 @@ class TenantRequestService:
                             "Booking",
                             booking.id
                         )
-            else:
+            elif new_status in [status.value for status in TenantRequestStatus]:
                 tenant_request.status = new_status
                 tenant_request.updated_at = datetime.now(timezone.utc)
+                
+                if new_status == TenantRequestStatus.REJECTED.value:
+                    tenant = tenant_request.tenant
+                    if tenant and tenant.email:
+                        await self.email_service.send_update_action_email(
+                            tenant.email,
+                            "Tenant Request Status",
+                            request_id
+                        )
+                
                 db.commit()
                 db.refresh(tenant_request)
+            else:
+                raise ValueError(f"Invalid status: {new_status}")
 
             return tenant_request
 
