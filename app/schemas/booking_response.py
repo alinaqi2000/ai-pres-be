@@ -2,32 +2,46 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 from enums.booking_status import BookingStatus
-from enums.payment_method import PaymentMethodType, PaymentMethodStatus, PaymentMethodCategory
+from enums.payment_method import (
+    PaymentMethodType,
+    PaymentMethodStatus,
+    PaymentMethodCategory,
+)
 from .invoice_schema import InvoiceLineItemResponse
-from .auth_schema import UserMinimumResponse
 from .tenant_request_response import TenantRequestMinimumResponse
-from .property_response import PropertyMinimumResponse
-from .property_response import FloorMinimumResponse
-from .property_response import UnitMinimumResponse
 from .booking_schema import BookingMinimumResponse
 from enums.payment_status import PaymentStatus
 from .invoice_schema import InvoiceMinimumResponse
 from .payment_method_schema import PaymentMethodMinimumResponse
+from .auth_schema import UserMinimumResponse
+from .property_response import PropertyMinimumResponse
+from .property_response import FloorMinimumResponse
+from .property_response import UnitMinimumResponse
+
 
 class BookingResponse(BaseModel):
     id: int
-    tenant: UserMinimumResponse
-    tenant_request: TenantRequestMinimumResponse
+    tenant: Optional[UserMinimumResponse] = None
+    owner: Optional[UserMinimumResponse] = None
+    property: Optional[PropertyMinimumResponse] = None
+    floor: Optional[FloorMinimumResponse] = None  # Will be populated for tenant request bookings
+    unit: Optional[UnitMinimumResponse] = None# Will be populated for tenant request bookings
+    booked_by_owner: bool
     status: BookingStatus
-    payment_method: Optional[PaymentMethodMinimumResponse] = None
     created_at: datetime
+    start_date: datetime        
+    end_date: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    total_price: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class InvoiceResponse(BaseModel):
     id: int
+    tenant: Optional[UserMinimumResponse] = None
+    owner: Optional[UserMinimumResponse] = None
     booking: BookingMinimumResponse
     line_items: List[InvoiceLineItemResponse] = []
     amount: float
@@ -59,7 +73,3 @@ class PaymentMethodResponse(BaseModel):
     category: PaymentMethodCategory = PaymentMethodCategory.MOBILE_WALLET
 
     model_config = ConfigDict(from_attributes=True)
-
-
-
-    

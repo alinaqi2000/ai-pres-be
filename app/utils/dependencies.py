@@ -49,3 +49,33 @@ def get_current_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     return user
+
+
+def is_owner(user: User, db: Session) -> bool:
+    """Check if a user is a property owner by seeing if they have any properties"""
+    from database.models.property_model import Property
+    
+    property_count = db.query(Property).filter(Property.owner_id == user.id).count()
+    return property_count > 0
+
+
+def is_tenant(user: User, db: Session) -> bool:
+    """Check if a user is a tenant by seeing if they have any bookings"""
+    from database.models.booking_model import Booking
+    
+    booking_count = db.query(Booking).filter(Booking.tenant_id == user.id).count()
+    return booking_count > 0
+
+
+def owner_required(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Dependency to ensure the current user is a property owner"""
+    if not is_owner(current_user, db):
+        raise HTTPException(status_code=403, detail="Only property owners can access this endpoint")
+    return current_user
+
+
+def tenant_required(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Dependency to ensure the current user is a tenant"""
+    if not is_tenant(current_user, db):
+        raise HTTPException(status_code=403, detail="Only tenants can access this endpoint")
+    return current_user

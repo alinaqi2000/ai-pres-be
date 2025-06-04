@@ -5,9 +5,11 @@ from datetime import datetime
 from database.models.payment_model import Payment
 from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
+from database.models.property_model import Property, Unit
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
 from enums.payment_status import PaymentStatus
 from enums.booking_status import BookingStatus
+from responses.error import not_found_error
 
 
 class PaymentService:
@@ -17,19 +19,40 @@ class PaymentService:
     def create_payment(
         self, db: Session, payment_in: PaymentCreate, user_id: int
     ) -> Payment:
-        booking = db.query(Booking).filter(Booking.id == payment_in.booking_id).first()
-        if not booking or booking.tenant_id != user_id:
-            raise ValueError("Invalid booking or user not authorized for this booking.")
+        if not payment_in.invoice_id:
+            return not_found_error("Invoice ID is required.")
 
-        if payment_in.invoice_id:
-            invoice = (
-                db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
-            )
-            if not invoice or invoice.booking_id != payment_in.booking_id:
-                raise ValueError("Invalid invoice or invoices does not match booking.")
-            if invoice.amount != payment_in.amount:
-                pass
-        db_payment = Payment(**payment_in.model_dump(), status=PaymentStatus.PENDING)
+        invoice = db.query(Invoice).filter(Invoice.id == payment_in.invoice_id).first()
+        if not invoice:
+            return not_found_error("Invalid invoice ID.")
+
+        # Get booking and check authorization
+        booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
+        if not booking:
+            return not_found_error("Invoice has no associated booking.")
+
+        # Check if user is authorized
+        authorized_to_pay = False
+        if booking.tenant_id == user_id:
+            authorized_to_pay = True
+        elif booking.property_id:
+            property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+            if property_obj and property_obj.owner_id == user_id:
+                authorized_to_pay = True
+
+        if not authorized_to_pay:
+            return not_found_error("User not authorized to make payment for this invoice.")
+
+        # Validate payment amount matches invoice
+        if invoice.amount != payment_in.amount:
+            return not_found_error("Payment amount must match invoice amount.")
+
+        # Create payment with booking_id from invoice
+        db_payment = Payment(
+            **payment_in.model_dump(),
+            booking_id=invoice.booking_id,
+            status=PaymentStatus.PENDING
+        )
         db.add(db_payment)
         db.commit()
         db.refresh(db_payment)
@@ -40,7 +63,7 @@ class PaymentService:
     ) -> Optional[Payment]:
         db_payment = self.get_payment(db, payment_id)
         if not db_payment:
-            return None
+            return not_found_error("Payment not found.")
 
         update_data = payment_update.model_dump(exclude_unset=True)
         for key, value in update_data.items():
@@ -54,15 +77,11 @@ class PaymentService:
             booking = (
                 db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
             )
-            if booking:
-                if (
-                    booking.status == BookingStatus.PENDING_PAYMENT
-                    or booking.status == BookingStatus.PENDING
-                ):
-                    booking.status = BookingStatus.CONFIRMED
-                    booking.updated_at = datetime.now()
-                    db.commit()
-                    db.refresh(booking)
+            if booking and booking.status == BookingStatus.PENDING:
+                booking.status = BookingStatus.CONFIRMED
+                booking.updated_at = datetime.now()
+                db.commit()
+                db.refresh(booking)
         elif db_payment.status == PaymentStatus.FAILED:
             booking = (
                 db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
@@ -71,7 +90,7 @@ class PaymentService:
                 BookingStatus.CANCELLED,
                 BookingStatus.COMPLETED,
             ]:
-                booking.status = BookingStatus.PAYMENT_FAILED
+                booking.status = BookingStatus.PENDING
                 booking.updated_at = datetime.now()
                 db.commit()
                 db.refresh(booking)
@@ -103,11 +122,20 @@ class PaymentService:
     def get_payments_by_user(
         self, db: Session, user_id: int, skip: int = 0, limit: int = 100
     ) -> List[Payment]:
-        return (
+        tenant_payments = (
             db.query(Payment)
             .join(Payment.booking)
             .filter(Booking.tenant_id == user_id)
-            .offset(skip)
-            .limit(limit)
             .all()
         )
+
+        owner_payments = (
+            db.query(Payment)
+            .join(Payment.booking)
+            .join(Booking.property)
+            .filter(Property.owner_id == user_id)
+            .all()
+        )
+
+        all_payments = tenant_payments + owner_payments
+        return all_payments[skip : skip + limit]

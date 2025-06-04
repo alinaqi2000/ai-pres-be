@@ -217,3 +217,5 @@ Thumbs.db
 
 # Uploads
 app/uploads/
+
+app/recommendation_models/

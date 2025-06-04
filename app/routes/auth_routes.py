@@ -16,17 +16,18 @@ from schemas.auth_schema import (
 )
 
 from database.init import get_db
+
 from utils.dependencies import (
     hash_password,
     verify_password,
     create_access_token,
     get_current_user,
+    owner_required,
 )
 from services.auth_service import (
     create_user,
     get_user_by_email,
     get_user_by_id,
-    get_all_users,
     delete_user,
     update_user,
 )
@@ -38,6 +39,7 @@ from responses.error import (
     conflict_error,
     not_found_error,
     internal_server_error,
+    forbidden_error,
 )
 
 
@@ -55,10 +57,16 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
     try:
         user = create_user(payload, db)
         token = create_access_token({"sub": user.email})
-        return data_response({"access_token": token, "token_type": "bearer", "user": UserResponse.from_orm(user)})
+        return data_response(
+            {
+                "access_token": token,
+                "token_type": "bearer",
+                "user": UserResponse.from_orm(user),
+            }
+        )
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to register user", str(e))
+        return internal_server_error(f"Failed to register user: {str(e)}")
 
 
 @router.post("/signin", response_model=ResponseModel)
@@ -69,31 +77,61 @@ def signin(credentials: LoginRequest, db: Session = Depends(get_db)):
             return unauthorized_error("Invalid credentials")
 
         token = create_access_token({"sub": user.email})
-        return data_response({"access_token": token, "token_type": "bearer", "user": UserResponse.from_orm(user)})
+        return data_response(
+            {
+                "access_token": token,
+                "token_type": "bearer",
+                "user": UserResponse.from_orm(user),
+            }
+        )
 
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.get("/get_all", response_model=List[UserResponse])
-def get_all_users_endpoint(
-    db: Session = Depends(get_db), current_user=Depends(get_current_user)
+@router.post("/create-user", response_model=ResponseModel)
+async def create_user_route(
+    payload: UserCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(owner_required),
 ):
+    """Route for owners to create tenant users"""
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
-        return get_all_users(db)
+        user = create_user(payload, db, created_by_owner=True, owner_id=current_user.id)
+        return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to retrieve users", str(e))
+        return internal_server_error(f"Failed to create user: {str(e)}")
 
 
-@router.get("/me", response_model=Union[UserResponse, ResponseModel])
-def get_user(
-    db: Session = Depends(get_db), current_user=Depends(get_current_user)
-):
+@router.get("/my-users", response_model=ResponseModel)
+def get_my_users(db: Session = Depends(get_db), current_user=Depends(owner_required)):
+    """Route for owners to get all their tenants"""
     if not isinstance(current_user, User):
         return current_user
 
+    try:
+        users = (
+            db.query(User)
+            .filter(
+                User.booked_by_owner == True,
+                User.created_by_owner_id == current_user.id,
+            )
+            .all()
+        )
+        return data_response([UserResponse.from_orm(user) for user in users])
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(f"Failed to retrieve users: {str(e)}")
+
+
+@router.get("/me", response_model=Union[UserResponse, ResponseModel])
+def get_user(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Route for any authenticated user to get their own information"""
     try:
         user = get_user_by_id(current_user.id, db)
         if not user:
@@ -101,56 +139,88 @@ def get_user(
         return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to fetch user", str(e))
+        return internal_server_error(f"Failed to fetch user: {str(e)}")
 
 
-@router.delete("/user/{user_id}", response_model=ResponseModel)
-def delete_user_by_id(
-    user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
+@router.delete("/delete-user/{user_id}", response_model=ResponseModel)
+async def delete_user_route(
+    user_id: int, 
+    db: Session = Depends(get_db), 
+    current_user=Depends(owner_required)
 ):
+    """Route for owners to delete tenant users"""
     if not isinstance(current_user, User):
         return current_user
-
+    
     try:
-        user = get_user_by_id(user_id, db)
-        if user:
-            db.delete(user)
-            db.commit()
-        return empty_response()
+        # Verify the user belongs to the current owner
+        user_to_delete = (
+            db.query(User)
+            .filter(
+                User.id == user_id, 
+                User.booked_by_owner == True,
+                User.created_by_owner_id == current_user.id
+            )
+            .first()
+        )
+
+        if not user_to_delete:
+            return forbidden_error("You can only delete users that were created by you")
+
+        delete_user(user_id, db)
+        return data_response({"message": f"User with id {user_id} deleted successfully"})
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to delete user", str(e))
+        return internal_server_error(f"Failed to delete user: {str(e)}")
 
 
-@router.patch("/user/{user_id}", response_model=Union[ResponseModel, UserUpdate])
-def update_user_route(
+@router.put("/update-user/{user_id}", response_model=ResponseModel)
+async def update_user_route(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(owner_required),
 ):
+    """Route for owners to update tenant users"""
+    if not isinstance(current_user, User):
+        return current_user
+    
     try:
-        user = update_user(user_id, payload, db)
-        if not user:
-            return not_found_error(f"No user found with id {user_id}")
-        return data_response(
-            {
-                "name": payload.name,
-                "email": payload.email,
-                "password": payload.password,
-            },
+        # Verify the user belongs to the current owner
+        user_to_update = (
+            db.query(User)
+            .filter(
+                User.id == user_id, 
+                User.booked_by_owner == True,
+                User.created_by_owner_id == current_user.id
+            )
+            .first()
         )
+        
+        if not user_to_update:
+            return forbidden_error("You can only update users that were created by you")
+        
+        user = update_user(user_id, payload, db)
+        return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error("Failed to update user", str(e))
+        return internal_server_error(f"Failed to update user: {str(e)}")
 
 
 @router.post("/reset-password", response_model=ResponseModel)
-async def reset_password(email: str, db: Session = Depends(get_db)):
+async def reset_password(
+    email: str, db: Session = Depends(get_db), current_user=Depends(owner_required)
+):
+    """Route for owners to reset a tenant's password"""
     try:
         user = get_user_by_email(email, db)
         if not user:
             return not_found_error("User not found")
+
+        if not user.booked_by_owner:
+            return forbidden_error(
+                "You can only reset passwords for users that were created by property owners"
+            )
 
         new_password = "".join(
             random.choices(string.ascii_letters + string.digits, k=8)
@@ -159,7 +229,6 @@ async def reset_password(email: str, db: Session = Depends(get_db)):
         user.hashed_password = hash_password(new_password)
         db.commit()
 
-        # Send the new password to user's email
         await email_service.send_new_password_email(email, new_password)
 
         return data_response(
@@ -176,34 +245,19 @@ async def update_password(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if not isinstance(current_user, User):
-        return current_user
-
+    """Route for any authenticated user to update their own password"""
     try:
         if not verify_password(payload.current_password, current_user.hashed_password):
             return unauthorized_error("Current password is incorrect")
 
         current_user.hashed_password = hash_password(payload.new_password)
         db.commit()
-        db.refresh(current_user)
 
-        return data_response(
-            {"message": "Password has been updated"}
+        await email_service.send_new_password_email(
+            current_user.email, payload.new_password
         )
+
+        return data_response({"message": "Password updated successfully"})
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
-
-
-@router.delete("/{user_id}", response_model=ResponseModel)
-def delete_user_by_id(
-    user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
-):
-    try:
-        deleted_user = delete_user(user_id, db)
-        if not deleted_user:
-            return not_found_error(f"No user found with id {user_id}")
-        return empty_response()
-    except Exception as e:
-        traceback.print_exc()
-        return internal_server_error("Failed to delete user", str(e))

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -9,6 +10,7 @@ from database.models.booking_model import Booking
 from database.models.invoice_model import Invoice
 from schemas.payment_schema import PaymentCreate, PaymentUpdate
 from schemas.booking_response import PaymentResponse
+from services.email_service import EmailService
 from services.payment_service import PaymentService
 from utils.dependencies import get_current_user
 from responses.success import data_response
@@ -22,23 +24,38 @@ import traceback
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 payment_service = PaymentService()
+email_service = EmailService()
 
 
 @router.post("/create_payment", response_model=PaymentResponse)
-def create_payment(
+async def create_payment(
     payment_in: PaymentCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),):
+    current_user=Depends(get_current_user),
+):
     if not isinstance(current_user, User):
         return current_user
     try:
-        created_payment = payment_service.create_payment(
+        created_payment_result = payment_service.create_payment(
             db, payment_in, current_user.id
         )
+
+        if isinstance(created_payment_result, JSONResponse):
+            return created_payment_result
+
+        created_payment = created_payment_result
+        email_service = EmailService()
+        if current_user.email:
+            await email_service.send_create_action_email(
+                current_user.email, "Payment", created_payment.id
+            )
         return data_response(
             PaymentResponse.model_validate(created_payment).model_dump(mode="json")
         )
+    except HTTPException as he:
+        raise he
     except ValueError as ve:
+        traceback.print_exc()
         return conflict_error(str(ve))
     except Exception as e:
         traceback.print_exc()
@@ -49,7 +66,8 @@ def create_payment(
 def get_payment(
     payment_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),):
+    current_user=Depends(get_current_user),
+):
     if not isinstance(current_user, User):
         return current_user
     try:
@@ -59,11 +77,15 @@ def get_payment(
 
         booking = payment.booking
         if not booking:
-            return internal_server_error("Booking data associated with payment is missing.")
+            return internal_server_error(
+                "Booking data associated with payment is missing."
+            )
 
         is_tenant = booking.tenant_id == current_user.id
 
-        property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+        property_obj = (
+            db.query(Property).filter(Property.id == booking.property_id).first()
+        )
         if not property_obj:
             return internal_server_error(
                 "Property data associated with booking is missing."
@@ -74,41 +96,70 @@ def get_payment(
         if not (is_tenant or is_owner):
             return forbidden_error("Not authorized to view this payment.")
 
-        return data_response(PaymentResponse.model_validate(payment).model_dump(mode="json"))
+        return data_response(
+            PaymentResponse.model_validate(payment).model_dump(mode="json")
+        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
 @router.patch("/{payment_id}", response_model=PaymentResponse)
-def update_payment(
+async def update_payment(
     payment_id: int,
     payment_update: PaymentUpdate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),):
+    current_user=Depends(get_current_user),
+):
     if not isinstance(current_user, User):
         return current_user
     try:
         payment_to_check = payment_service.get_payment(db, payment_id)
         if not payment_to_check:
-            return not_found_error(f"Payment with ID {payment_id} not found.")
-
-        if not payment_to_check.booking:
-            return internal_server_error("Booking data associated with payment is missing.")
-        
-        if not payment_to_check.booking.property:
-             return internal_server_error("Property data associated with booking is missing.")
-
-        if payment_to_check.booking.property.owner_id != current_user.id:
-            return forbidden_error("Not authorized to update this payment.")
-
-        updated_payment = payment_service.update_payment(db, payment_id, payment_update)
-        if not updated_payment:
             return not_found_error(
-                f"Payment with ID {payment_id} update failed."
+                f"Payment with ID {payment_id} not found to check authorization."
+            )
+        if isinstance(payment_to_check, JSONResponse):
+            return payment_to_check
+
+        booking_of_payment = (
+            db.query(Booking).filter(Booking.id == payment_to_check.booking_id).first()
+        )
+        if not booking_of_payment:
+            return internal_server_error("Booking associated with payment not found.")
+
+        property_of_booking = (
+            db.query(Property)
+            .filter(Property.id == booking_of_payment.property_id)
+            .first()
+        )
+        if not property_of_booking:
+            return internal_server_error("Property associated with booking not found.")
+
+        if property_of_booking.owner_id != current_user.id:
+            return forbidden_error(
+                "Not authorized to update this payment. Only property owner can update."
+            )
+
+        updated_payment_result = payment_service.update_payment(
+            db, payment_id, payment_update
+        )
+
+        if isinstance(updated_payment_result, JSONResponse):
+            return updated_payment_result
+
+        # Send email notification for payment update
+        from services.email_service import EmailService
+
+        email_service = EmailService()
+        if current_user.email:
+            await email_service.send_update_action_email(
+                current_user.email, "Payment", payment_id
             )
         return data_response(
-            PaymentResponse.model_validate(updated_payment).model_dump(mode="json")
+            PaymentResponse.model_validate(updated_payment_result).model_dump(
+                mode="json"
+            )
         )
     except ValueError as ve:
         return conflict_error(str(ve))
@@ -121,7 +172,8 @@ def update_payment(
 def get_payments_for_booking_route(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),    skip: int = 0,
+    current_user=Depends(get_current_user),
+    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
@@ -133,7 +185,9 @@ def get_payments_for_booking_route(
 
         is_tenant = booking.tenant_id == current_user.id
 
-        property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
+        property_obj = (
+            db.query(Property).filter(Property.id == booking.property_id).first()
+        )
         if not property_obj:
             return internal_server_error("Property associated with booking not found.")
 
@@ -155,7 +209,8 @@ def get_payments_for_booking_route(
 def get_payments_for_invoice_route(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),    skip: int = 0,
+    current_user=Depends(get_current_user),
+    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
@@ -171,7 +226,9 @@ def get_payments_for_invoice_route(
         is_tenant = invoice.booking.tenant_id == current_user.id
 
         property_obj = (
-            db.query(Property).filter(Property.id == invoice.booking.property_id).first()
+            db.query(Property)
+            .filter(Property.id == invoice.booking.property_id)
+            .first()
         )
         if not property_obj:
             return internal_server_error(
@@ -195,15 +252,21 @@ def get_payments_for_invoice_route(
 @router.get("/user/me", response_model=List[PaymentResponse])
 def get_my_payments(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),    skip: int = 0,
+    current_user=Depends(get_current_user),
+    skip: int = 0,
     limit: int = 100,
 ):
     if not isinstance(current_user, User):
         return current_user
     try:
-        payments = payment_service.get_payments_by_user(db, current_user.id, skip, limit)
+        payments = payment_service.get_payments_by_user(
+            db, current_user.id, skip, limit
+        )
         return data_response(
-            [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
+            [
+                PaymentResponse.model_validate(p).model_dump(mode="json")
+                for p in payments
+            ]
         )
     except Exception as e:
         traceback.print_exc()

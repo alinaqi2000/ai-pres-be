@@ -5,10 +5,9 @@ from enums.payment_status import PaymentStatus
 
 
 class PaymentBase(BaseModel):
-    booking_id: int
     invoice_id: Optional[int] = None
     amount: float
-    payment_method: str
+    payment_method_id: int
 
 
 class PaymentCreate(PaymentBase):

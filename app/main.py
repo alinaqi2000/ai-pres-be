@@ -11,7 +11,6 @@ from config import DEBUG, APP_HOST, APP_PORT
 from database.init import Base, engine
 from routes import (
     auth_routes,
-    role_routes,
     property_routes,
     image_routes,
     tenant_request_routes,
@@ -21,12 +20,25 @@ from routes import (
     payment_method_routes,
 )
 
+import logging
+
 
 def custom_json_encoder(obj: Any) -> Any:
     if isinstance(obj, datetime):
         return obj.isoformat()
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -37,6 +49,10 @@ os.makedirs(uploads_dir, exist_ok=True)
 
 app.mount(f"/{UPLOAD_DIR}", StaticFiles(directory=uploads_dir), name=UPLOAD_DIR)
 
+# Initialize background tasks scheduler
+from services.background_tasks import BackgroundTasks
+background_tasks = BackgroundTasks()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -46,7 +62,6 @@ app.add_middleware(
 )
 
 app.include_router(auth_routes.router)
-app.include_router(role_routes.router)
 app.include_router(property_routes.router)
 app.include_router(image_routes.router)
 app.include_router(tenant_request_routes.router)

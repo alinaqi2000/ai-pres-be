@@ -22,7 +22,8 @@ class TenantRequest(Base):
 
     preferred_move_in = Column(DateTime, nullable=True)
     monthly_offer = Column(Integer, nullable=True)
-    duration_months = Column(Integer, nullable=True)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
     contact_method = Column(String(50), nullable=True)
 
     tenant = relationship("User", foreign_keys=[tenant_id])

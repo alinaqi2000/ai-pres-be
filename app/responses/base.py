@@ -47,6 +47,14 @@ def build_response(
             # Remove None values that might have been created by filtering
             if isinstance(serialized, dict):
                 serialized = {k: v for k, v in serialized.items() if v is not None}
+                # Remove empty units array if it exists at the root level
+                if "units" in serialized and serialized["units"] == []:
+                    del serialized["units"]
+            # If it's a list of dictionaries (multiple properties), filter each one
+            elif isinstance(serialized, list) and all(isinstance(item, dict) for item in serialized):
+                for item in serialized:
+                    if "units" in item and item["units"] == []:
+                        del item["units"]
             response["data"] = serialized
 
     if error is not None:

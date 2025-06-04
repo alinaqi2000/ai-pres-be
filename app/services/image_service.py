@@ -1,3 +1,4 @@
+import secrets
 from typing import Optional
 from pydantic import BaseModel
 from schemas.image_schema import (
@@ -42,21 +43,16 @@ class ImageService:
         Raises:
             ValueError: If the file is not an image
         """
-        # Create uploads directory if it doesn't exist
         os.makedirs(UPLOAD_DIR + "/" + str(entity_id), exist_ok=True)
 
-        # Get file extension and MIME type
         _, ext = os.path.splitext(file.filename)
         mime_type = mimetypes.guess_type(file.filename)[0]
 
-        # Validate that it's an image file
         if not mime_type or not mime_type.startswith("image/"):
             raise ValueError("Only image files are allowed")
 
-        # Generate file path
         file_path = os.path.join(UPLOAD_DIR + "/" + str(entity_id), f"{prefix}{ext}")
 
-        # Save the file
         with open(file_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
@@ -80,18 +76,15 @@ class ImageService:
         """
 
         try:
-            # Get property
             property = db.query(Property).filter(Property.id == property_id).first()
             if not property:
                 raise Exception(f"Property with ID {property_id} not found")
 
-            # Check ownership
             if property.owner_id != current_user.id:
                 raise Exception(
                     "You are not authorized to upload images for this property"
                 )
 
-            # Check if thumbnail already exists and delete it
             existing_thumbnail = (
                 db.query(PropertyImageModel)
                 .filter(
@@ -101,22 +94,18 @@ class ImageService:
                 .first()
             )
 
-            # Save the file
             file_path = await self.save_uploaded_file(file, "thumbnail", property_id)
-            # Create thumbnail
             thumbnail = PropertyImageCreate(
                 property_id=property_id,
-                image_path=str(file_path),  # Convert to string explicitly
+                image_path=str(file_path),
                 is_thumbnail=True,
             )
 
             new_thumbnail = self.property_image_service.create(db, thumbnail)
 
             if existing_thumbnail:
-                # Delete the existing thumbnail file from disk
                 if os.path.exists(existing_thumbnail.image_path):
                     os.remove(existing_thumbnail.image_path)
-                # Delete the existing thumbnail from database
                 db.delete(existing_thumbnail)
                 db.commit()
 
@@ -141,18 +130,15 @@ class ImageService:
             The created PropertyImage object
         """
         try:
-            # Get property
             property = db.query(Property).filter(Property.id == property_id).first()
             if not property:
                 raise Exception(f"Property with ID {property_id} not found")
 
-            # Check ownership
             if property.owner_id != current_user.id:
                 raise Exception(
                     "You are not authorized to upload images for this property"
                 )
 
-            # Check image count
             image_count = (
                 db.query(PropertyImageModel)
                 .filter(
@@ -168,12 +154,9 @@ class ImageService:
                     "Maximum number of images (3) reached for this property"
                 )
 
-            # Save the file
-            file_path = await self.save_uploaded_file(
-                file, f"image_{image_count + 1}", property_id
-            )
+            random_name = f"image_{secrets.token_hex(8)}"
+            file_path = await self.save_uploaded_file(file, random_name, property_id)
 
-            # Create image
             image = PropertyImageCreate(
                 property_id=property_id, image_path=str(file_path)
             )
@@ -198,19 +181,16 @@ class ImageService:
             The created UnitImage object
         """
         try:
-            # Get unit
             unit = db.query(Unit).filter(Unit.id == unit_id).first()
             if not unit:
                 raise Exception(f"Unit with ID {unit_id} not found")
 
-            # Check ownership through property
             property = (
                 db.query(Property).filter(Property.id == unit.property_id).first()
             )
             if not property or property.owner_id != current_user.id:
                 raise Exception("You are not authorized to upload images for this unit")
 
-            # Check image count
             image_count = (
                 db.query(UnitImageModel)
                 .filter(UnitImageModel.unit_id == unit_id)
@@ -220,12 +200,11 @@ class ImageService:
             if image_count >= 3:
                 raise Exception("Maximum number of images (3) reached for this unit")
 
-            # Save the file
+            random_name = f"unit_{unit_id}_image_{secrets.token_hex(8)}"
             file_path = await self.save_uploaded_file(
-                file, f"unit_{unit_id}_image_{image_count + 1}", unit.property_id
+                file, random_name, unit.property_id
             )
 
-            # Create image
             image = UnitImageCreate(unit_id=unit_id, image_path=str(file_path))
             return self.unit_image_service.create(db, image)
         except Exception as e:
@@ -244,7 +223,6 @@ class ImageService:
             current_user: Current authenticated user
         """
         try:
-            # Get image
             image = (
                 db.query(PropertyImageModel)
                 .filter(PropertyImageModel.id == image_id)
@@ -253,22 +231,18 @@ class ImageService:
             if not image:
                 raise Exception(f"Image with ID {image_id} not found")
 
-            # Check ownership
             property = (
                 db.query(Property).filter(Property.id == image.property_id).first()
             )
             if not property or property.owner_id != current_user.id:
                 raise Exception("You are not authorized to delete this image")
 
-            # Check if it's a thumbnail (thumbnails cannot be deleted)
-            if image.is_thumbnail:
-                raise Exception("Thumbnail images cannot be deleted")
+            # if image.is_thumbnail:
+            #     raise Exception("Thumbnail images cannot be deleted")
 
-            # Delete the file from disk
             if os.path.exists(image.image_path):
                 os.remove(image.image_path)
 
-            # Delete from database
             db.delete(image)
             db.commit()
         except Exception as e:
@@ -287,14 +261,12 @@ class ImageService:
             current_user: Current authenticated user
         """
         try:
-            # Get image
             image = (
                 db.query(UnitImageModel).filter(UnitImageModel.id == image_id).first()
             )
             if not image:
                 raise Exception(f"Image with ID {image_id} not found")
 
-            # Check ownership through property
             unit = db.query(Unit).filter(Unit.id == image.unit_id).first()
             if not unit:
                 raise Exception(f"Unit with ID {image.unit_id} not found")
@@ -305,7 +277,6 @@ class ImageService:
             if not property or property.owner_id != current_user.id:
                 raise Exception("You are not authorized to delete this image")
 
-            # Delete the file from disk
             if os.path.exists(image.image_path):
                 os.remove(image.image_path)
 

@@ -57,8 +57,10 @@ class PropertyBase(BaseModel):
     address: str
     description: Optional[str] = None
     total_area: Optional[float] = None
+    monthly_rent: Optional[float] = None
     is_published: bool = False
     owner_id: Optional[int] = None
+    is_occupied: bool 
 
 
 class PropertyCreate(PropertyBase):

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
@@ -10,14 +10,15 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False)
-    floor_id = Column(Integer, ForeignKey("floors.id"), nullable=False)
-    unit_id = Column(Integer, ForeignKey("units.id"), nullable=False)
-    tenant_request_id = Column(Integer, ForeignKey("tenant_requests.id"), nullable=False)
+    floor_id = Column(Integer, ForeignKey("floors.id"), nullable=True)
+    unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
+    tenant_request_id = Column(Integer, ForeignKey("tenant_requests.id"), nullable=True)
+    booked_by_owner = Column(Boolean, default=False)
 
     start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
     total_price = Column(Float, nullable=False)
     status = Column(String(50), default=BookingStatus.PENDING.value, nullable=False)
     notes = Column(Text, nullable=True)  

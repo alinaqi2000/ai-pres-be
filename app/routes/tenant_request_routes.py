@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 
-from database.models.tenant_request_model import TenantRequest
 from database.models.property_model import Property, Floor, Unit
 from database.models.user_model import User
 from schemas.tenant_request_schema import (
@@ -11,7 +10,10 @@ from schemas.tenant_request_schema import (
 )
 from schemas.tenant_request_response import TenantRequestResponse
 from services.tenant_request_service import TenantRequestService
+from services.booking_service import BookingService
 from utils.dependencies import get_current_user, get_db
+from utils import generate_property_id
+from utils.id_generator import generate_unit_id
 from responses.success import data_response, empty_response
 from responses.error import (
     not_found_error,
@@ -19,11 +21,14 @@ from responses.error import (
     conflict_error,
     forbidden_error,
 )
-
+from services.email_service import EmailService
 import traceback
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/tenant_requests", tags=["Tenant Requests"])
 tenant_request_service = TenantRequestService()
+booking_service = BookingService()
+email_service = EmailService()
 
 
 @router.post("/create_request", response_model=TenantRequestResponse)
@@ -36,41 +41,93 @@ async def create_request(
         return current_user
 
     try:
-        # Check for existing requests
+        if booking_service.is_property_already_booked(db, request.property_id):
+            return conflict_error(
+                "This property is currently booked and not available for tenant requests."
+            )
+
         existing = tenant_request_service.check_existing_request(
             db, current_user.id, request
         )
         if existing:
-            return conflict_error("Tenant has already made a request for this property.")
-
-        property_exists = db.query(Property).filter_by(id=request.property_id).first()
-        if not property_exists:
-            return not_found_error(
-                f"Property with id {request.property_id} does not exist"
+            return conflict_error(
+                "Tenant has already made a request for this property."
             )
 
-        if isinstance(property_exists, Property) and property_exists.owner_id == current_user.id:
-            return forbidden_error("Not authorized to make a request for this property")
+        if not request.unit_id:
+            return conflict_error("unit_id is required to make a tenant request.")
 
-        if request.floor_id:
-            floor_exists = db.query(Floor).filter_by(id=request.floor_id).first()
-            if not floor_exists:
-                return not_found_error(f"Floor with id {request.floor_id} does not exist")
-
-        if request.unit_id:
-            unit_exists = db.query(Unit).filter_by(id=request.unit_id, is_occupied=False).first()
-            if not unit_exists:
-                return not_found_error(f"Unit with id {request.unit_id} is not available")
-
-        request.tenant_id = current_user.id
-        request.owner_id = property_exists.owner_id
-        created = tenant_request_service.create(db, request)
-        return data_response(
-            TenantRequestResponse.model_validate(created).model_dump(mode="json")
+        unit_obj = (
+            db.query(Unit)
+            .options(selectinload(Unit.floor).selectinload(Floor.property))
+            .filter(Unit.id == request.unit_id)
+            .first()
         )
+
+        if not unit_obj:
+            return not_found_error(f"Unit with ID {request.unit_id} not found.")
+
+        if unit_obj.is_occupied:
+            return conflict_error(
+                f"Unit with ID {request.unit_id} is currently occupied and not available for requests."
+            )
+
+        floor_obj = unit_obj.floor
+        property_obj = floor_obj.property
+
+        if not floor_obj:
+            return internal_server_error(
+                f"Critical: Floor not found for unit {unit_obj.id}. Data inconsistency."
+            )
+        if not property_obj:
+            return internal_server_error(
+                f"Critical: Property not found for floor {floor_obj.id}. Data inconsistency."
+            )
+
+        if property_obj.owner_id == current_user.id:
+            return forbidden_error(
+                "Property owners cannot make tenant requests for their own properties."
+            )
+
+        actual_request_payload = TenantRequestCreate(
+            unit_id=unit_obj.id,
+            floor_id=floor_obj.id,
+            property_id=property_obj.id,
+            tenant_id=current_user.id,
+            owner_id=property_obj.owner_id,
+            message=request.message,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            monthly_offer=request.monthly_offer,
+            preferred_move_in=request.preferred_move_in,
+        )
+
+        existing_request = tenant_request_service.check_existing_request(
+            db, current_user.id, actual_request_payload
+        )
+        if existing_request:
+            return conflict_error(
+                "You have already made a request for this unit, or another pending/accepted request for you exists for this unit."
+            )
+
+        created_tenant_request = tenant_request_service.create(
+            db,
+            actual_request_payload,
+        )
+
+        await email_service.send_create_action_email(
+            current_user.email, "Tenant Request", unit_obj.id
+        )
+
+        response = TenantRequestResponse.model_validate(created_tenant_request)
+        if response.property and not response.property.property_id:
+            response.property.property_id = generate_property_id(response.property.id)
+        if response.unit:
+            response.unit.unit_id = generate_unit_id(response.unit.id)
+        return data_response(response.model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
-        return internal_server_error(str(e))
+        return internal_server_error(f"An unexpected error occurred: {str(e)}")
 
 
 @router.get("/all_requests", response_model=List[TenantRequestResponse])
@@ -85,12 +142,15 @@ async def list_all_requests(
 
     try:
         requests = tenant_request_service.get_all(db, skip, limit)
-        return data_response(
-            [
-                TenantRequestResponse.model_validate(r).model_dump(mode="json")
-                for r in requests
-            ]
-        )
+        responses = []
+        for r in requests:
+            response = TenantRequestResponse.model_validate(r)
+            if response.property and not response.property.property_id:
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
+            responses.append(response.model_dump(mode="json"))
+        return data_response(responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -109,18 +169,21 @@ def get_request(
         request = tenant_request_service.get(db, request_id)
         if not request:
             return not_found_error(f"Tenant request with ID {request_id} not found")
-        return data_response(
-            TenantRequestResponse.model_validate(request).model_dump(mode="json")
-        )
+        response = TenantRequestResponse.model_validate(request)
+        if response.property and not response.property.property_id:
+            response.property.property_id = generate_property_id(response.property.id)
+        if response.unit:
+            response.unit.unit_id = generate_unit_id(response.unit.id)
+        return data_response(response.model_dump(mode="json"))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
-@router.patch("/{request_id}", response_model=TenantRequestResponse)
-def update_request(
+@router.patch("/{request_id}", response_model=TenantRequestUpdate)
+async def update_request(
     request_id: int,
-    update_data: TenantRequestUpdate,
+    update_data: TenantRequestUpdate, 
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -133,10 +196,36 @@ def update_request(
             return not_found_error(f"Tenant request with ID {request_id} not found")
 
         if current_user.id == db_obj.property.owner_id:
-            updated = tenant_request_service.update(db, db_obj, update_data)
-            return data_response(
-                TenantRequestResponse.model_validate(updated).model_dump(mode="json")
+            response_data = TenantRequestUpdate(
+                status=update_data.status if update_data.status else db_obj.status,
+                is_seen=update_data.is_seen if update_data.is_seen is not None else db_obj.is_seen
             )
+
+            updated = False
+            if update_data.status:
+                updated = await tenant_request_service.update_status(
+                    db=db,
+                    request_id=request_id,
+                    new_status=update_data.status,
+                    user_id=current_user.id
+                )
+
+            if update_data.is_seen is not None:
+                db_obj.is_seen = update_data.is_seen
+                db.commit()
+                db.refresh(db_obj)
+                updated = True
+                if not update_data.status:
+                    await email_service.send_update_action_email(
+                        current_user.email,
+                        "Tenant Request Seen",
+                        db_obj.unit_id
+                    )
+
+            if updated:
+                return data_response(response_data.model_dump(mode="json"))
+            
+            return not_found_error("No updates were made")
         else:
             return forbidden_error("Not authorized to update this request")
     except Exception as e:
@@ -157,6 +246,9 @@ async def delete_request(
         success = tenant_request_service.delete(db, request_id)
         if not success:
             return not_found_error(f"Tenant request with ID {request_id} not found")
+        await email_service.send_delete_action_email(
+            current_user.email, "Tenant Request", request_id
+        )
         return empty_response()
     except Exception as e:
         traceback.print_exc()
@@ -180,12 +272,15 @@ async def get_requests_by_property(
             return not_found_error(f"Property with id {property_id} does not exist.")
 
         requests = tenant_request_service.get_by_property(db, property_id, skip, limit)
-        return data_response(
-            [
-                TenantRequestResponse.model_validate(r).model_dump(mode="json")
-                for r in requests
-            ]
-        )
+        responses = []
+        for r in requests:
+            response = TenantRequestResponse.model_validate(r)
+            if response.property and not response.property.property_id:
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
+            responses.append(response.model_dump(mode="json"))
+        return data_response(responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -208,12 +303,15 @@ async def get_requests_by_tenant(
             return not_found_error(f"Tenant with ID {tenant_id} not found")
 
         requests = tenant_request_service.get_by_tenant(db, tenant_id, skip, limit)
-        return data_response(
-            [
-                TenantRequestResponse.model_validate(r).model_dump(mode="json")
-                for r in requests
-            ]
-        )
+        responses = []
+        for r in requests:
+            response = TenantRequestResponse.model_validate(r)
+            if response.property and not response.property.property_id:
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
+            responses.append(response.model_dump(mode="json"))
+        return data_response(responses)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))

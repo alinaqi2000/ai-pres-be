@@ -6,14 +6,14 @@ import traceback
 from schemas.booking_schema import (
     BookingCreate,
     BookingUpdate,
-    BookingStatusUpdate,
 )
 from schemas.booking_response import BookingResponse
 from services.booking_service import BookingService
+from services.property_service import PropertyService
+from services.unit_service import UnitService
 from database.models.user_model import User
 from database.models.property_model import Property
-from database.models import Floor
-from database.models import Unit
+from database.models.booking_model import Booking
 from utils.dependencies import get_current_user, get_db
 from responses.success import data_response, empty_response
 from responses.error import (
@@ -21,311 +21,375 @@ from responses.error import (
     internal_server_error,
     conflict_error,
     forbidden_error,
+    bad_request_error,
 )
-from enums.booking_status import BookingStatus
+from utils.id_generator import generate_unit_id
 
 from services.tenant_request_service import TenantRequestService
-from database.models.tenant_request_model import TenantRequest
+from services.email_service import EmailService
+from enums.booking_status import BookingStatus  
 
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 booking_service = BookingService()
 tenant_request_service = TenantRequestService()
+property_service = PropertyService()
+unit_service = UnitService()
+email_service = EmailService()
 
 
-@router.post("/create_booking", response_model=BookingResponse)
-def create_bookings(
-    booking_in: BookingCreate,
+@router.get("/my-bookings", response_model=List[BookingResponse])
+async def get_my_bookings(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """
+    Returns all tenant bookings for properties owned by the authenticated property owner.
+    Only property owners can access this endpoint.
+    """
+    if not isinstance(current_user, User):
+        return current_user
+
+    if not booking_service.is_property_owner(db, current_user.id):
+        return forbidden_error("Only property owners can access this endpoint.")
+
+    try:
+        owner_properties = (
+            db.query(Property).filter(Property.owner_id == current_user.id).all()
+        )
+        owner_property_ids = [p.id for p in owner_properties]
+
+        bookings = (
+            db.query(Booking).filter(Booking.property_id.in_(owner_property_ids)).all()
+        )
+
+        formatted_bookings = []
+        for booking in bookings:
+            response = booking_service.format_booking_response(booking, db)
+            if booking.unit_id:
+                response["unit_id"] = generate_unit_id(booking.unit_id)
+            if booking.tenant_request and booking.tenant_request.unit_id:
+                response["tenant_request"]["unit_id"] = generate_unit_id(
+                    booking.tenant_request.unit_id
+                )
+            formatted_bookings.append(response)
+        return data_response(formatted_bookings)
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+
+@router.get("/tenant-bookings/{tenant_id}", response_model=List[BookingResponse])
+async def get_tenant_bookings(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Returns tenant bookings with different access levels:
+    - Tenants can only see their own request-based bookings
+    - Property owners can see all bookings for this tenant related to their properties
+    """
+    if not isinstance(current_user, User):
+        return current_user
+
+    try:
+        if current_user.id == tenant_id:
+            bookings = (
+                db.query(Booking)
+                .filter(
+                    Booking.tenant_id == tenant_id, Booking.booked_by_owner == False
+                )
+                .all()
+            )
+            return data_response(
+                [booking_service.format_booking_response(b, db) for b in bookings]
+            )
+
+        if booking_service.is_property_owner(db, current_user.id):
+            owner_properties = (
+                db.query(Property).filter(Property.owner_id == current_user.id).all()
+            )
+            owner_property_ids = [p.id for p in owner_properties]
+
+            bookings = (
+                db.query(Booking)
+                .filter(
+                    Booking.tenant_id == tenant_id,
+                    Booking.property_id.in_(owner_property_ids),
+                )
+                .all()
+            )
+            bookings_response = []
+            for b in bookings:
+                response = booking_service.format_booking_response(b, db)
+                if b.unit_id:
+                    response["unit_id"] = generate_unit_id(b.unit_id)
+                if b.tenant_request and b.tenant_request.unit_id:
+                    response["tenant_request"]["unit_id"] = generate_unit_id(
+                        b.tenant_request.unit_id
+                    )
+                bookings_response.append(response)
+            return data_response(bookings_response)
+
+        return forbidden_error("You are not authorized to view these bookings")
+
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+
+# @router.get("/owner-bookings", response_model=List[BookingResponse])
+# async def get_owner_bookings(
+#     db: Session = Depends(get_db),
+#     current_user=Depends(get_current_user)
+# ):
+#     """
+#     Returns only bookings that the authenticated property owner created for their own tenants.
+#     """
+#     """Get owner's created bookings"""
+#     if not isinstance(current_user, User):
+#         return current_user
+
+#     try:
+#         # Verify owner access
+#         if not booking_service.is_property_owner(db, current_user.id):
+#             return forbidden_error("Only property owners can access this endpoint")
+
+#         bookings = booking_service.get_owner_property_bookings(db, current_user.id)
+#         return data_response([
+#             booking_service.format_booking_response(b, db) for b in bookings
+#         ])
+#     except Exception as e:
+#         traceback.print_exc()
+#         return internal_server_error(str(e))
+
+
+@router.get("/property/{property_id}", response_model=List[BookingResponse])
+async def get_bookings_for_property(
+    property_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Returns all bookings for a specific property (both owner-created and tenant-requested).
+    Only accessible by the property owner.
+    """
     if not isinstance(current_user, User):
         return current_user
     try:
-        unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
-        if not unit:
-            return not_found_error(f"Unit with ID {booking_in.unit_id} not found.")
-
-        floor = db.query(Floor).filter(Floor.id == unit.floor_id).first()
-        if not floor:
-            return not_found_error(f"Floor for unit {booking_in.unit_id} not found.")
-
         property_obj = (
-            db.query(Property).filter(Property.id == floor.property_id).first()
-        )
-        if not property_obj:
-            return not_found_error(f"Property for floor {floor.id} not found.")
-
-        booking_in.property_id = property_obj.id
-        booking_in.floor_id = floor.id
-
-        tenant_request = (
-            db.query(TenantRequest)
-            .filter(
-                TenantRequest.tenant_id == current_user.id,
-                TenantRequest.unit_id == booking_in.unit_id,
-                TenantRequest.status == "accepted",
-            )
-            .order_by(TenantRequest.created_at.desc())
+            db.query(Property)
+            .filter(Property.id == property_id, Property.owner_id == current_user.id)
             .first()
         )
-        if tenant_request is None and booking_in.tenant_request_id is None:
-            return conflict_error(
-                "No recent accepted tenant request found for this unit. Please specify a tenant request."
-            )
 
-        if booking_in.tenant_request_id is not None:
-            tenant_request = tenant_request_service.get(
-                db, booking_in.tenant_request_id
-            )
-            if not tenant_request:
-                return not_found_error(
-                    f"Tenant request with ID {booking_in.tenant_request_id} not found."
-                )
+        if not property_obj:
+            return forbidden_error("You don't have access to this property's bookings")
 
-            if tenant_request.tenant_id != current_user.id:
-                return forbidden_error(
-                    "Not authorized to create a booking for this tenant request."
-                )
-
-            if tenant_request.status != "accepted":
-                return conflict_error(
-                    f"Tenant request {booking_in.tenant_request_id} has not been accepted by the owner. Current status: {tenant_request.status}"
-                )
-
-        created_booking = booking_service.create(
-            db, booking_in, current_user.id, tenant_request.id
-        )
-        if not created_booking:
-            return conflict_error(
-                "Could not create booking. Unit might be unavailable or request invalid."
-            )
-        return data_response(
-            BookingResponse.model_validate(created_booking).model_dump(mode="json")
-        )
-    except ValueError as ve:
-        return conflict_error(str(ve))
-    except Exception as e:
-        traceback.print_exc()
-        return internal_server_error(str(e))
-
-
-@router.get("/properties/{property_id}/bookings/", response_model=List[BookingResponse])
-def get_bookings_for_property(
-    property_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not isinstance(current_user, User):
-        return current_user
-    property_obj = db.query(Property).filter(Property.id == property_id).first()
-    if not property_obj:
-        return not_found_error(f"Property with ID {property_id} not found.")
-
-    if property_obj.owner_id != current_user.id:
-        return forbidden_error(
-            "You are not authorized to view bookings for this property."
+        all_bookings = (
+            db.query(Booking).filter(Booking.property_id == property_id).all()
         )
 
-    try:
-        bookings = booking_service.get_by_property(
-            db, property_id=property_id, skip=skip, limit=limit
-        )
-        return data_response(
-            [
-                BookingResponse.model_validate(b).model_dump(mode="json")
-                for b in bookings
-            ]
-        )
-    except Exception as e:
-        traceback.print_exc()
-        return internal_server_error(str(e))
+        if not all_bookings:
+            return data_response([])
 
+        formatted_bookings = [
+            booking_service.format_booking_response(booking, db, property_obj)
+            for booking in all_bookings
+        ]
 
-@router.get("/my_bookings", response_model=List[BookingResponse])
-def get_my_bookings(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not isinstance(current_user, User):
-        return current_user
-    try:
-        bookings = booking_service.get_by_tenant(db, current_user.id, skip, limit)
-        return data_response(
-            [
-                BookingResponse.model_validate(b).model_dump(mode="json")
-                for b in bookings
-            ]
-        )
-    except Exception as e:
-        traceback.print_exc()
-        return internal_server_error(str(e))
-
-
-@router.get("/property_owner", response_model=List[BookingResponse])
-def get_bookings_for_my_properties(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not isinstance(current_user, User):
-        return current_user
-    try:
-        bookings = booking_service.get_by_property_owner(
-            db, current_user.id, skip, limit
-        )
-        return data_response(
-            [
-                BookingResponse.model_validate(b).model_dump(mode="json")
-                for b in bookings
-            ]
-        )
+        return data_response(formatted_bookings)
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
 @router.get("/{booking_id}", response_model=BookingResponse)
-def get_booking(
+async def get_booking(
     booking_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """
+    Returns details of a specific booking:
+    - Property owners can view any booking for their properties
+    - Tenants can only view their own request-based bookings
+    """
     if not isinstance(current_user, User):
         return current_user
+
     try:
         booking = booking_service.get(db, booking_id)
         if not booking:
-            return not_found_error(f"Booking with ID {booking_id} not found.")
+            return not_found_error(f"Booking {booking_id} not found")
 
-        prop = db.query(Property).filter(Property.id == booking.property_id).first()
-        if not (
-            booking.tenant_id == current_user.id
-            or (prop and prop.owner_id == current_user.id)
-        ):
-            return forbidden_error("Not authorized to view this booking.")
-
-        return data_response(
-            BookingResponse.model_validate(booking).model_dump(mode="json")
+        property_obj = (
+            db.query(Property)
+            .filter(
+                Property.id == booking.property_id, Property.owner_id == current_user.id
+            )
+            .first()
         )
+
+        response = booking_service.format_booking_response(booking, db)
+        if booking.unit_id:
+            response["unit_id"] = generate_unit_id(booking.unit_id)
+        if booking.tenant_request and booking.tenant_request.unit_id:
+            response["tenant_request"]["unit_id"] = generate_unit_id(
+                booking.tenant_request.unit_id
+            )
+
+        if property_obj:
+            return data_response(response)
+
+        if booking.tenant_id == current_user.id and not booking.booked_by_owner:
+            return data_response(response)
+
+        return forbidden_error("Not authorized to view this booking")
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
 @router.patch("/{booking_id}", response_model=BookingResponse)
-def update_booking(
+async def update_booking(
     booking_id: int,
     booking_in: BookingUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Updates booking status. Owners can update any status, tenants can only cancel their own bookings."""
     if not isinstance(current_user, User):
         return current_user
     try:
-        db_booking = booking_service.get(db, booking_id)
-        if not db_booking:
+        existing_booking = booking_service.get_booking(db, booking_id)
+        if not existing_booking:
             return not_found_error(f"Booking with ID {booking_id} not found.")
 
-        can_update = False
-        prop = db.query(Property).filter(Property.id == db_booking.property_id).first()
-        is_owner = prop and prop.owner_id == current_user.id
+        property = db.query(Property).filter(Property.id == existing_booking.property_id).first()
+        is_owner = property and property.owner_id == current_user.id
 
-        if (
-            db_booking.tenant_id == current_user.id
-            and db_booking.status == BookingStatus.PENDING
-        ):
-            allowed_tenant_updates = ["start_date", "end_date", "notes"]
-            for field in booking_in.model_dump(exclude_unset=True).keys():
-                if field not in allowed_tenant_updates:
-                    return forbidden_error(f"Tenants cannot update '{field}'.")
-            can_update = True
-        elif is_owner:
-            if booking_in.status and booking_in.status != db_booking.status:
-                return forbidden_error(
-                    "Please use the dedicated status update endpoint for changing booking status."
-                )
-            can_update = True
+        try:
+            status = BookingStatus(booking_in.status)
+        except ValueError:
+            return bad_request_error(f"Invalid status: {booking_in.status}")
 
-        if not can_update:
-            return forbidden_error(
-                "Not authorized to update this booking or perform this specific update."
-            )
+        updated_booking = await booking_service.update_status(
+            db=db,
+            booking_id=booking_id,
+            new_status=status,
+            user_id=current_user.id,
+            is_owner=is_owner,
+        )
 
-        updated_booking = booking_service.update(db, db_booking, booking_in)
         if not updated_booking:
-            return conflict_error(
-                "Could not update booking. Unit might be unavailable for new dates or update invalid."
-            )
-        return data_response(
-            BookingResponse.model_validate(updated_booking).model_dump(mode="json")
-        )
-    except ValueError as ve:
-        return conflict_error(str(ve))
-    except Exception as e:
-        traceback.print_exc()
-        return internal_server_error(str(e))
+            return not_found_error("Invalid status transition")
 
+        response = booking_service.format_booking_response(updated_booking, db, property)
+        return data_response(response)
 
-@router.patch("/{booking_id}/status", response_model=BookingResponse)
-def update_booking_status(
-    booking_id: int,
-    status_update: BookingStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not isinstance(current_user, User):
-        return current_user
-    try:
-        db_booking = booking_service.get(db, booking_id)
-        if not db_booking:
-            return not_found_error(f"Booking with ID {booking_id} not found.")
-
-        prop = db.query(Property).filter(Property.id == db_booking.property_id).first()
-        is_owner = prop and prop.owner_id == current_user.id
-
-        updated_booking = booking_service.update_status(
-            db, booking_id, status_update.status, current_user.id, is_owner
-        )
-        if not updated_booking:
-            return forbidden_error(
-                "Not authorized to change status or invalid status transition."
-            )
-        return data_response(
-            BookingResponse.model_validate(updated_booking).model_dump(mode="json")
-        )
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
 
 
 @router.delete("/{booking_id}")
-def delete_booking(
+async def delete_booking(
     booking_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """
+    Deletes a booking. Owners can delete any booking, tenants can only delete their pending bookings.
+    """
     if not isinstance(current_user, User):
         return current_user
     try:
-        db_booking = booking_service.get(db, booking_id)
-        if not db_booking:
-            return not_found_error(f"Booking with ID {booking_id} not found.")
+        booking = booking_service.get(db, booking_id)
+        if not booking:
+            return not_found_error(f"Booking {booking_id} not found")
 
-        prop = db.query(Property).filter(Property.id == db_booking.property_id).first()
-        is_owner = prop and prop.owner_id == current_user.id
-
-        success = booking_service.delete(db, booking_id, current_user.id, is_owner)
-        if not success:
-            return forbidden_error(
-                "Not authorized to delete this booking or deletion not allowed at current stage."
+        result = booking_service.delete_booking(db, booking_id, current_user.id)
+        if not result:
+            return not_found_error(
+                f"Booking with ID {booking_id} not found or you are not authorized to delete it."
             )
+
+        # Send email to tenant about booking deletion
+        if booking.tenant and booking.tenant.email:
+            await email_service.send_delete_action_email(
+                booking.tenant.email,
+                "Booking",
+                booking_id
+            )
+
         return empty_response()
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
+
+
+@router.post("/create-booking", response_model=BookingResponse)
+async def create_bookings(
+    booking_in: BookingCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Creates a new booking. Only property owners can create bookings directly for their properties and tenants.
+    """
+    if not isinstance(current_user, User):
+        return current_user
+    try:
+        # Check if user is the property owner
+        property_obj = (
+            db.query(Property).filter(Property.id == booking_in.property_id).first()
+        )
+        is_owner = property_obj and property_obj.owner_id == current_user.id
+
+        # Validate property owner permissions
+        if not is_owner and not booking_service.is_property_owner(db, current_user.id):
+            return forbidden_error("Only property owners can create bookings directly.")
+
+        if not booking_in.tenant_id:
+            return bad_request_error(
+                "A valid User ID must be provided when creating a booking."
+            )
+
+        # Validate unit and floor if provided
+        if booking_in.unit_id and booking_in.floor_id:
+            if not booking_service.validate_unit_and_floor(
+                db, booking_in.unit_id, booking_in.floor_id, booking_in.property_id
+            ):
+                return conflict_error("Invalid unit or floor configuration")
+
+        created_booking = booking_service.create(
+            db,
+            booking_in,
+            actual_tenant_id=booking_in.tenant_id,
+            tenant_request_id=None,
+            booked_by_owner=is_owner,
+        )
+        
+        if isinstance(created_booking, str):
+            return conflict_error(created_booking)
+
+        if not created_booking:
+            return conflict_error("Could not create booking.")
+
+        if current_user.email:
+            await email_service.send_create_action_email(
+                current_user.email, "Booking", created_booking.id
+            )
+
+        return data_response(
+            booking_service.format_booking_response(created_booking, db, property_obj)
+        )
+
+    except ValueError as ve:
+        return conflict_error(str(ve))
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+

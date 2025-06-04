@@ -13,6 +13,7 @@ from sqlalchemy.sql import func
 from database.init import Base
 from enums.unit_type import UnitType
 from enums.property_type import PropertyType
+from datetime import datetime, timezone
 
 
 class Unit(Base):
@@ -37,6 +38,7 @@ class Unit(Base):
         "UnitImage", back_populates="unit", cascade="all, delete-orphan"
     )
     tenant_requests = relationship("TenantRequest", back_populates="unit")
+    property = relationship("Property", back_populates="units")
 
 
 class Floor(Base):
@@ -66,10 +68,12 @@ class Property(Base):
     address = Column(String(255))
     description = Column(String(2000), nullable=True)
     total_area = Column(Float, nullable=True)
+    monthly_rent = Column(Float, nullable=True)
     is_published = Column(Boolean, default=False)
     owner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    is_occupied = Column(Boolean, default=False)
 
     floors = relationship(
         "Floor", back_populates="property", cascade="all, delete-orphan"
@@ -81,3 +85,8 @@ class Property(Base):
         "TenantRequest", back_populates="property", cascade="all, delete-orphan"
     )
     owner = relationship("User")
+    units = relationship(
+        "Unit", back_populates="property", cascade="all, delete-orphan"
+    )
+    bookings = relationship("Booking", back_populates="property")
+

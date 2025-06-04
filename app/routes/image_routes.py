@@ -12,64 +12,70 @@ router = APIRouter(prefix="/images", tags=["Images"])
 
 image_service = ImageService()
 
+
 @router.post("/property/{property_id}/thumbnail", response_model=PropertyImageResponse)
 async def upload_property_thumbnail(
     property_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
     try:
-        result = await image_service.create_property_thumbnail(db, property_id, file, current_user)
+        result = await image_service.create_property_thumbnail(
+            db, property_id, file, current_user
+        )
         image_response = PropertyImageResponse.from_orm(result)
-        return data_response(image_response.model_dump(mode='json'))
+        return data_response(image_response.model_dump(mode="json"))
     except Exception as e:
         return internal_server_error(str(e))
+
 
 @router.post("/property/{property_id}/image", response_model=PropertyImageResponse)
 async def upload_property_image(
     property_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
     try:
-        result = await image_service.create_property_image(db, property_id, file, current_user)
+        result = await image_service.create_property_image(
+            db, property_id, file, current_user
+        )
         image_response = PropertyImageResponse.from_orm(result)
-        return data_response(image_response.model_dump(mode='json'))
+        return data_response(image_response.model_dump(mode="json"))
     except Exception as e:
         return internal_server_error(str(e))
+
 
 @router.post("/unit/{unit_id}/image", response_model=UnitImageResponse)
 async def upload_unit_image(
     unit_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     if not isinstance(current_user, User):
         return current_user
-    
+
     try:
         result = await image_service.create_unit_image(db, unit_id, file, current_user)
         image_response = UnitImageResponse.from_orm(result)
-        return data_response(image_response.model_dump(mode='json'))
+        return data_response(image_response.model_dump(mode="json"))
     except Exception as e:
         return internal_server_error(str(e))
 
+
 @router.delete("/property/image/{image_id}")
 async def delete_property_image(
-    image_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    image_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
     Delete a property image
-    
+
     Args:
         image_id: ID of the image to delete
     """
@@ -81,15 +87,14 @@ async def delete_property_image(
     except Exception as e:
         return internal_server_error(str(e))
 
+
 @router.delete("/unit/image/{image_id}")
 async def delete_unit_image(
-    image_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    image_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
     Delete a unit image
-    
+
     Args:
         image_id: ID of the image to delete
     """

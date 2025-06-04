@@ -35,4 +35,3 @@ class PaymentMethodMinimumResponse(BaseModel):
     category: PaymentMethodCategory = PaymentMethodCategory.MOBILE_WALLET
 
     model_config = ConfigDict(from_attributes=True)
-

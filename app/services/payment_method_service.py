@@ -76,7 +76,9 @@ def get_all_payment_methods(db: Session) -> Union[list, dict]:
         return {"error": f"Failed to retrieve payment methods: {str(e)}"}
 
 
-def get_payment_method_model_for_update(db: Session, key: str) -> Optional[PaymentMethod]:
+def get_payment_method_model_for_update(
+    db: Session, key: str
+) -> Optional[PaymentMethod]:
     try:
         return db.query(PaymentMethod).filter(PaymentMethod.key == key).first()
     except SQLAlchemyError as e:
@@ -84,37 +86,41 @@ def get_payment_method_model_for_update(db: Session, key: str) -> Optional[Payme
         return None
 
 
-def service_update_payment_method(db: Session, key: str, payment_method: PaymentMethodCreate) -> Union[PaymentMethodResponse, dict]:
+def service_update_payment_method(
+    db: Session, key: str, payment_method: PaymentMethodCreate
+) -> Union[PaymentMethodResponse, dict]:
     try:
         if payment_method.type not in list(PaymentMethodType):
-            return {"error": f"Invalid payment method type. Must be one of: {[t.value for t in PaymentMethodType]}"}
-        
+            return {
+                "error": f"Invalid payment method type. Must be one of: {[t.value for t in PaymentMethodType]}"
+            }
+
         if payment_method.category not in list(PaymentMethodCategory):
-            return {"error": f"Invalid payment method category. Must be one of: {[c.value for c in PaymentMethodCategory]}"}
-        
+            return {
+                "error": f"Invalid payment method category. Must be one of: {[c.value for c in PaymentMethodCategory]}"
+            }
+
         db_payment_method = get_payment_method_model_by_key(db, key)
         if not db_payment_method:
             return {"error": "Payment method not found"}
-        
-        # Check if the new key (if changed) already exists
+
         if payment_method.key and payment_method.key != key:
             existing = get_payment_method_model_by_key(db, payment_method.key)
             if existing:
                 return {"error": "A payment method with this key already exists"}
-        
+
         for attr, value in payment_method.dict(exclude_unset=True).items():
             setattr(db_payment_method, attr, value)
-        
+
         db.commit()
         db.refresh(db_payment_method)
-        
+
         return PaymentMethodResponse.from_orm(db_payment_method)
     except IntegrityError as e:
         db.rollback()
-        # More specific error handling for integrity constraints
-        if 'unique constraint' in str(e).lower():
+        if "unique constraint" in str(e).lower():
             return {"error": "Payment method key must be unique"}
-        elif 'foreign key constraint' in str(e).lower():
+        elif "foreign key constraint" in str(e).lower():
             return {"error": "Invalid reference in payment method"}
         else:
             return {"error": "Update failed due to data integrity issue"}
