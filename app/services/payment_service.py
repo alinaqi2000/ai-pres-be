@@ -73,27 +73,26 @@ class PaymentService:
         db.commit()
         db.refresh(db_payment)
 
-        if db_payment.status == PaymentStatus.COMPLETED:
-            booking = (
-                db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
-            )
-            if booking and booking.status == BookingStatus.PENDING:
-                booking.status = BookingStatus.CONFIRMED
-                booking.updated_at = datetime.now()
-                db.commit()
-                db.refresh(booking)
-        elif db_payment.status == PaymentStatus.FAILED:
-            booking = (
-                db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
-            )
-            if booking and booking.status not in [
-                BookingStatus.CANCELLED,
-                BookingStatus.COMPLETED,
-            ]:
-                booking.status = BookingStatus.PENDING
-                booking.updated_at = datetime.now()
-                db.commit()
-                db.refresh(booking)
+        # if db_payment.status == PaymentStatus.COMPLETED:
+        #     booking = (
+        #         db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
+        #     )
+        #     booking.status = BookingStatus.CONFIRMED
+        #     booking.updated_at = datetime.now()
+        #     db.commit()
+        #     db.refresh(booking)
+        # elif db_payment.status == PaymentStatus.FAILED:
+        #     booking = (
+        #         db.query(Booking).filter(Booking.id == db_payment.booking_id).first()
+        #     )
+        #     if booking and booking.status not in [
+        #         BookingStatus.CANCELLED,
+        #         BookingStatus.COMPLETED,
+        #     ]:
+        #         booking.status = BookingStatus.PENDING
+        #         booking.updated_at = datetime.now()
+        #         db.commit()
+        #         db.refresh(booking)
 
         return db_payment
 

@@ -101,7 +101,9 @@ async def create_user_route(
         return current_user
     
     try:
+        payload.password = "".join(random.choices(string.ascii_letters + string.digits, k=8))
         user = create_user(payload, db, created_by_owner=True, owner_id=current_user.id)
+        await email_service.send_new_tenant_created_email(user.email, payload.password, current_user.name)
         return data_response(UserResponse.from_orm(user))
     except Exception as e:
         traceback.print_exc()

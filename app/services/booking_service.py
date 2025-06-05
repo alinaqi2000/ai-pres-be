@@ -105,10 +105,10 @@ class BookingService:
         query = db.query(Booking).filter(
             Booking.unit_id == unit_id,
             Booking.status.in_(
-                [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE]
+                [BookingStatus.ACTIVE]
             ),
-            Booking.start_date < end_date,
-            Booking.end_date > start_date,
+            end_date and Booking.start_date < end_date,
+            end_date and Booking.end_date > start_date,
         )
         if exclude_booking_id:
             query = query.filter(Booking.id != exclude_booking_id)
@@ -144,8 +144,6 @@ class BookingService:
         #         Booking.unit_id == unit.id,
         #         Booking.status.in_(
         #             [
-        #                 BookingStatus.PENDING,
-        #                 BookingStatus.CONFIRMED,
         #                 BookingStatus.ACTIVE,
         #             ]
         #         ),
@@ -193,7 +191,7 @@ class BookingService:
         current_date = datetime.now(timezone.utc)
         start_date = booking_in.start_date.replace(tzinfo=timezone.utc)
 
-        if booking_in.end_date:
+        if booking_in.end_date is not None:
             end_date = booking_in.end_date.replace(tzinfo=timezone.utc)
             min_duration = timedelta(days=30)
             if end_date - start_date < min_duration:
@@ -239,7 +237,11 @@ class BookingService:
 
         # Set the status before creating booking
         booking_in.status = status
-
+        if booking_in.unit_id:
+            unit = db.query(Unit).filter(Unit.id == booking_in.unit_id).first()
+            booking_in.property_id = unit.property_id
+            booking_in.floor_id = unit.floor_id
+        
         # Create the booking
         booking = Booking(
             tenant_id=actual_tenant_id,
@@ -310,12 +312,11 @@ class BookingService:
 
                 if (
                     not is_owner
-                    or current_status != BookingStatus.PENDING
-                    or new_status != BookingStatus.CONFIRMED
+                    or new_status != BookingStatus.ACTIVE
                 ):
                     return None
 
-                if new_status == BookingStatus.CONFIRMED:
+                if new_status == BookingStatus.ACTIVE:
                     try:
                         invoice = self.invoice_service.create_invoice_from_booking(
                             db, db_booking
@@ -354,10 +355,7 @@ class BookingService:
             return False
 
         can_delete = False
-        if (
-            db_booking.tenant_id == user_id
-            and db_booking.status == BookingStatus.PENDING
-        ):
+        if db_booking.tenant_id == user_id:
             can_delete = True
         elif is_owner:
             can_delete = True
@@ -385,10 +383,7 @@ class BookingService:
             if not is_owner:
                 return None
 
-            if (
-                new_status == BookingStatus.CONFIRMED
-                or new_status == BookingStatus.PENDING
-            ):
+            if new_status == BookingStatus.ACTIVE:
                 db_booking.status = new_status.value
                 db_booking.updated_at = datetime.now(timezone.utc)
                 db.commit()
@@ -653,8 +648,6 @@ class BookingService:
                 Booking.property_id == property_id,
                 Booking.status.in_(
                     [
-                        BookingStatus.PENDING,
-                        BookingStatus.CONFIRMED,
                         BookingStatus.ACTIVE,
                     ]
                 ),

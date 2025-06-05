@@ -308,8 +308,9 @@ async def create_invoice_from_booking(
         
         # Create invoice using booking data
         created_invoice = invoice_service.create_invoice_from_booking(db, booking)
-        if not created_invoice:
-            return internal_server_error("Failed to create invoice from booking")
+        
+        if isinstance(created_invoice, str):
+            return internal_server_error(created_invoice)
         
         # Format response
         response = format_invoice_response(db, created_invoice)

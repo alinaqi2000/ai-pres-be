@@ -129,13 +129,12 @@ class InvoiceService:
         try:
             # Create line item for booking
             line_item = InvoiceLineItemCreate(
-                description=f"Booking payment for {booking.start_date.date()} to {booking.end_date.date()}",
+                description=f"Booking payment for {booking.start_date.date()} to {booking.end_date.date() if booking.end_date else 'N/A'}",
                 amount=booking.total_price,
                 quantity=1
             )
 
             due_date = booking.start_date - timedelta(days=30)
-
             # Convert datetime to date for month field
             invoice_month = booking.start_date.replace(day=1).date()
 
@@ -151,7 +150,7 @@ class InvoiceService:
             return self.create(db, invoice_data)
         except Exception as e:
             print(f"Error creating invoice from booking: {str(e)}")
-            return None
+            return str(e)
 
     def get_by_month(self, db: Session, year: int, month: int) -> List[Invoice]:
         start_date = datetime(year, month, 1)
