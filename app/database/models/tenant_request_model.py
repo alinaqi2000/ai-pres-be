@@ -27,7 +27,7 @@ class TenantRequest(Base):
     end_date = Column(DateTime, nullable=True)
     contact_method = Column(String(50), nullable=True)
 
-    tenant = relationship("User", foreign_keys=[tenant_id])
+    tenant = relationship("User", foreign_keys=[tenant_id]) 
     owner = relationship("User", foreign_keys=[owner_id])
     property = relationship("Property", back_populates="tenant_requests")
     floor = relationship("Floor", back_populates="tenant_requests")

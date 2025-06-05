@@ -127,9 +127,9 @@ class InvoiceService:
     def create_invoice_from_booking(self, db: Session, booking: Booking) -> Optional[Invoice]:
         """Create an invoice automatically when a booking is confirmed"""
         try:
-            # Create line item for booking
+            month_name = booking.start_date.strftime("%B")
             line_item = InvoiceLineItemCreate(
-                description=f"Booking payment for {booking.start_date.date()} to {booking.end_date.date() if booking.end_date else 'N/A'}",
+                description=f"Booking payment for {month_name}",
                 amount=booking.total_price,
                 quantity=1
             )
