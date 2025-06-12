@@ -98,7 +98,7 @@ async def get_tenant_bookings(
             bookings = (
                 db.query(Booking)
                 .filter(
-                    Booking.tenant_id == tenant_id, Booking.booked_by_owner == False
+                    Booking.tenant_id == tenant_id
                 )
                 .all()
             )
@@ -137,32 +137,6 @@ async def get_tenant_bookings(
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
-
-
-# @router.get("/owner-bookings", response_model=List[BookingResponse])
-# async def get_owner_bookings(
-#     db: Session = Depends(get_db),
-#     current_user=Depends(get_current_user)
-# ):
-#     """
-#     Returns only bookings that the authenticated property owner created for their own tenants.
-#     """
-#     """Get owner's created bookings"""
-#     if not isinstance(current_user, User):
-#         return current_user
-
-#     try:
-#         # Verify owner access
-#         if not booking_service.is_property_owner(db, current_user.id):
-#             return forbidden_error("Only property owners can access this endpoint")
-
-#         bookings = booking_service.get_owner_property_bookings(db, current_user.id)
-#         return data_response([
-#             booking_service.format_booking_response(b, db) for b in bookings
-#         ])
-#     except Exception as e:
-#         traceback.print_exc()
-#         return internal_server_error(str(e))
 
 
 @router.get("/property/{property_id}", response_model=List[BookingResponse])
@@ -224,13 +198,7 @@ async def get_booking(
         if not booking:
             return not_found_error(f"Booking {booking_id} not found")
 
-        property_obj = (
-            db.query(Property)
-            .filter(
-                Property.id == booking.property_id, Property.owner_id == current_user.id
-            )
-            .first()
-        )
+        property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
 
         response = booking_service.format_booking_response(booking, db)
         if booking.unit_id:
@@ -275,16 +243,14 @@ async def update_booking(
         except ValueError:
             return bad_request_error(f"Invalid status: {booking_in.status}")
 
-        updated_booking = await booking_service.update_status(
+        updated_booking = await booking_service.update(
             db=db,
             booking_id=booking_id,
+            booking_in=booking_in, 
             new_status=status,
-            user_id=current_user.id,
+            # user_id=current_user.id,
             is_owner=is_owner,
         )
-
-        if not updated_booking:
-            return not_found_error("Invalid status transition")
 
         response = booking_service.format_booking_response(updated_booking, db, property)
         return data_response(response)
@@ -352,7 +318,7 @@ async def create_bookings(
         if not is_owner and not booking_service.is_property_owner(db, current_user.id):
             return forbidden_error("Only property owners can create bookings directly.")
 
-        if not booking_in.tenant_id:
+        if not booking_in.tenant_id:    
             return bad_request_error(
                 "A valid User ID must be provided when creating a booking."
             )

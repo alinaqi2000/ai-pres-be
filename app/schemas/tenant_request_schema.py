@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
-
+from enums.tenant_request_status import TenantRequestStatus
 
 class TenantRequestBase(BaseModel):
     owner_id: Optional[int] = None
@@ -22,6 +22,6 @@ class TenantRequestCreate(TenantRequestBase):
 
 
 class TenantRequestUpdate(BaseModel):
-    status: Optional[str] = None
+    status: TenantRequestStatus = str
     is_seen: Optional[bool] = None
             

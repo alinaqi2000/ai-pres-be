@@ -21,6 +21,7 @@ class Unit(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     property_id = Column(Integer, ForeignKey("properties.id"))
+    floor_id = Column(Integer, ForeignKey("floors.id"))
     name = Column(String(100), index=True)
     unit_type = Column(Enum(UnitType))
     area = Column(Float, nullable=True)
@@ -30,7 +31,6 @@ class Unit(Base):
     has_washroom = Column(Boolean, default=False)
     has_air_conditioning = Column(Boolean, default=False)
     has_internet = Column(Boolean, default=False)
-    floor_id = Column(Integer, ForeignKey("floors.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

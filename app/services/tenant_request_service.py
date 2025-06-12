@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from database.models import TenantRequest
-from schemas.tenant_request_schema import TenantRequestCreate, TenantRequestUpdate
+from schemas.tenant_request_schema import TenantRequestCreate
 from services.booking_service import BookingService
 from services.email_service import EmailService
 from schemas.booking_schema import BookingCreate
@@ -9,6 +9,7 @@ from schemas.tenant_request_response import TenantRequestResponse
 from utils.id_generator import generate_property_id, generate_unit_id
 from datetime import datetime, timezone
 from database.models.booking_model import Booking
+from enums.tenant_request_status import TenantRequestStatus
 
 class TenantRequestService:
     def __init__(self):
@@ -127,7 +128,7 @@ class TenantRequestService:
             if not tenant_request:
                 return None
 
-            if new_status == 'accepted':
+            if new_status == TenantRequestStatus.ACCEPTED.value:
                 tenant_request.status = new_status
                 tenant_request.updated_at = datetime.now(timezone.utc)
                 db.commit()
@@ -138,7 +139,7 @@ class TenantRequestService:
                     tenant_request=tenant_request
                 )
                 
-                if booking:
+                if booking and isinstance(booking, Booking):
                     tenant = tenant_request.tenant
                     if tenant and tenant.email:
                         await self.email_service.send_update_action_email(
@@ -151,11 +152,26 @@ class TenantRequestService:
                             "Booking",
                             booking.id
                         )
-            else:
+                else:
+                    print(f"Failed to create booking: {booking}")     
+                                       
+            elif new_status in [status.value for status in TenantRequestStatus]:
                 tenant_request.status = new_status
                 tenant_request.updated_at = datetime.now(timezone.utc)
+                
+                if new_status == TenantRequestStatus.REJECTED.value:
+                    tenant = tenant_request.tenant
+                    if tenant and tenant.email:
+                        await self.email_service.send_update_action_email(
+                            tenant.email,
+                            "Tenant Request Status",
+                            request_id
+                        )
+                
                 db.commit()
                 db.refresh(tenant_request)
+            else:
+                raise ValueError(f"Invalid status: {new_status}")
 
             return tenant_request
 
@@ -163,32 +179,6 @@ class TenantRequestService:
             print(f"Error in update_status: {str(e)}")
             db.rollback()
             raise e
-
-    def create_booking_from_tenant_request(
-        self, db: Session, tenant_request: TenantRequest
-    ) -> Optional[Booking]:
-        try:
-            booking_data = BookingCreate(
-                tenant_id=tenant_request.tenant_id,
-                property_id=tenant_request.property_id,
-                floor_id=tenant_request.floor_id, 
-                unit_id=tenant_request.unit_id,  
-                start_date=tenant_request.start_date,
-                end_date=tenant_request.end_date,
-                monthly_offer=tenant_request.monthly_offer,
-                status='pending',
-                notes=f"Auto-created from tenant request {tenant_request.id}"
-            )
-
-            return self.booking_service.create(
-                db=db,
-                booking_in=booking_data,
-                actual_tenant_id=tenant_request.tenant_id,
-                booked_by_owner=False
-            )
-        except Exception as e:      
-            print(f"Error creating booking: {str(e)}")
-            return None
 
     def format_tenant_request_response(self, request: TenantRequest, db: Session) -> dict:
         response = TenantRequestResponse.model_validate(request)

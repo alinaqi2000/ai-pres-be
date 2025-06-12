@@ -24,6 +24,9 @@ from responses.error import (
 from services.email_service import EmailService
 import traceback
 from sqlalchemy.orm import selectinload
+from datetime import datetime, timezone
+from dateutil.relativedelta import relativedelta
+
 
 router = APIRouter(prefix="/tenant_requests", tags=["Tenant Requests"])
 tenant_request_service = TenantRequestService()
@@ -41,10 +44,25 @@ async def create_request(
         return current_user
 
     try:
-        if booking_service.is_property_already_booked(db, request.property_id):
+        if booking_service.is_property_occupied(db, request.property_id, request.start_date):
             return conflict_error(
                 "This property is currently booked and not available for tenant requests."
             )
+
+        start_date = request.start_date.replace(tzinfo=timezone.utc)
+        
+
+        if request.end_date is not None:
+            end_date = request.end_date.replace(tzinfo=timezone.utc)
+            
+            min_end_date = start_date + relativedelta(months=1, days=-1)
+            
+            if end_date < min_end_date:
+                return conflict_error(
+                    "Booking duration must be at least one full calendar month. "
+                    f"Minimum end date would be {min_end_date.date()}"
+                )
+                
 
         existing = tenant_request_service.check_existing_request(
             db, current_user.id, request

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Foreign
 from sqlalchemy.orm import relationship
 from database.init import Base
 from datetime import datetime, timezone
+from enums.tenant_request_status import TenantRequestStatus
 
 
 class TenantRequest(Base):
@@ -15,7 +16,7 @@ class TenantRequest(Base):
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
 
     message = Column(Text, nullable=True)
-    status = Column(String(50), default="pending")
+    status = Column(String(50), default=TenantRequestStatus.PENDING.value, nullable=False)
     is_seen = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), onupdate=datetime.now(timezone.utc), nullable=True)
@@ -26,7 +27,7 @@ class TenantRequest(Base):
     end_date = Column(DateTime, nullable=True)
     contact_method = Column(String(50), nullable=True)
 
-    tenant = relationship("User", foreign_keys=[tenant_id])
+    tenant = relationship("User", foreign_keys=[tenant_id]) 
     owner = relationship("User", foreign_keys=[owner_id])
     property = relationship("Property", back_populates="tenant_requests")
     floor = relationship("Floor", back_populates="tenant_requests")

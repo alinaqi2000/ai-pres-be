@@ -20,7 +20,7 @@ class Booking(Base):
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
     total_price = Column(Float, nullable=False)
-    status = Column(String(50), default=BookingStatus.PENDING.value, nullable=False)
+    status = Column(String(50), nullable=False)
     notes = Column(Text, nullable=True)  
 
     created_at = Column(DateTime, default=datetime.now(timezone.utc))

@@ -17,7 +17,7 @@ from .auth_schema import UserMinimumResponse
 from .property_response import PropertyMinimumResponse
 from .property_response import FloorMinimumResponse
 from .property_response import UnitMinimumResponse
-
+from enums.invoice_status import InvoiceStatus
 
 class BookingResponse(BaseModel):
     id: int
@@ -43,7 +43,10 @@ class InvoiceResponse(BaseModel):
     tenant: Optional[UserMinimumResponse] = None
     owner: Optional[UserMinimumResponse] = None
     booking: BookingMinimumResponse
+    status: InvoiceStatus
     line_items: List[InvoiceLineItemResponse] = []
+    reference_number: str
+    month: datetime
     amount: float
     created_at: datetime
     updated_at: Optional[datetime]

@@ -32,6 +32,22 @@ class EmailService:
         )
         await self.mailer.send_message(message)
 
+    async def send_new_tenant_created_email(self, email: str, password: str, owner_name: str):
+        message = MessageSchema(
+            subject="New Tenant Created",
+            recipients=[email],
+            body=f"""Hello,
+
+Your account has been created by {owner_name}.
+
+Your password: {password}
+
+Best regards,
+The Support Team""",
+            subtype="plain",
+        )
+        await self.mailer.send_message(message)
+
     async def send_new_password_email(self, email: str, new_password: str):
         message = MessageSchema(
             subject="🔐 Your New Password - Action Required",

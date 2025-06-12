@@ -2,6 +2,7 @@ from .auth_schema import UserMinimumResponse
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
+from enums.tenant_request_status import TenantRequestStatus
 
 from .property_response import (
     PropertyMinimumResponse,
@@ -33,7 +34,7 @@ class TenantRequestResponse(BaseModel):
     start_date: datetime
     end_date: datetime
     monthly_offer: Optional[int] = None
-    status: str
+    status: TenantRequestStatus
     is_seen: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
