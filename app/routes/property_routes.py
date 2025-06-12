@@ -277,8 +277,35 @@ async def search_properties_and_units(
                     "city": property.city,
                     "address": property.address,
                     "property_type": str(property.property_type),
+                    "monthly_rent": property.monthly_rent,
+                    "is_published": property.is_published,
+                    "is_occupied": property.is_occupied,
+                    "created_at": property.created_at,
+                    "updated_at": property.updated_at,
+                    "thumbnail": None,
+                    "images": [],
+                    "meta": {
+                        "total_floors": 0,
+                        "total_units": 0,
+                        "total_unoccupied_units": 0,
+                    },
                     "floors": floors,
+                    "owner": UserMinimumResponse.model_validate(property.owner),
                 }
+                if property.images:
+                    for image in property.images:
+                        if image.is_thumbnail:
+                            prop_data["thumbnail"] = (
+                                PropertyImageResponse.model_validate(image).model_dump(
+                                    mode="json"
+                                )
+                            )
+                        else:
+                            prop_data["images"].append(
+                                PropertyImageResponse.model_validate(image).model_dump(
+                                    mode="json"
+                                )
+                            )
                 results.append(prop_data)
         if results:
             return data_response(results)

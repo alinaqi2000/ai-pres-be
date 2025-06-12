@@ -169,15 +169,14 @@ class InvoiceService:
             .all()
         )
 
-    def get_tenant_invoices(self, db: Session, tenant_id: int, property_owner_id: int) -> List[Invoice]:
+    def get_tenant_invoices(self, db: Session, tenant_id: int) -> List[Invoice]:
         """Get all invoices for a specific tenant, only accessible by property owner"""
         return (
             db.query(self.model)
             .join(Invoice.booking)
             .join(Booking.property)
             .filter(
-                Booking.tenant_id == tenant_id,
-                Property.owner_id == property_owner_id,
+                Booking.tenant_id == tenant_id
             )
             .options(
                 joinedload(self.model.line_items),

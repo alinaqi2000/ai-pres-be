@@ -220,11 +220,8 @@ async def get_tenant_invoices(
         return current_user
 
     try:
-        if not booking_service.is_property_owner(db, current_user.id):
-            return forbidden_error("Only property owners can access this endpoint")
-
         invoices = invoice_service.get_tenant_invoices(
-            db, tenant_id, current_user.id
+            db, tenant_id
         )
         
         # Format each invoice response

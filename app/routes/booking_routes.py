@@ -98,7 +98,7 @@ async def get_tenant_bookings(
             bookings = (
                 db.query(Booking)
                 .filter(
-                    Booking.tenant_id == tenant_id, Booking.booked_by_owner == False
+                    Booking.tenant_id == tenant_id
                 )
                 .all()
             )
@@ -198,13 +198,7 @@ async def get_booking(
         if not booking:
             return not_found_error(f"Booking {booking_id} not found")
 
-        property_obj = (
-            db.query(Property)
-            .filter(
-                Property.id == booking.property_id, Property.owner_id == current_user.id
-            )
-            .first()
-        )
+        property_obj = db.query(Property).filter(Property.id == booking.property_id).first()
 
         response = booking_service.format_booking_response(booking, db)
         if booking.unit_id:
