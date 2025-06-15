@@ -128,8 +128,9 @@ class InvoiceService:
         """Create an invoice automatically when a booking is confirmed"""
         try:
             month_name = booking.start_date.strftime("%B")
+            year = booking.start_date.strftime("%Y")
             line_item = InvoiceLineItemCreate(
-                description=f"Booking payment for {month_name}",
+                description=f"Monthly rent for {month_name}, {year}",
                 amount=booking.total_price,
                 quantity=1
             )

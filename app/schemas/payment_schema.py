@@ -8,6 +8,7 @@ class PaymentBase(BaseModel):
     invoice_id: Optional[int] = None
     amount: float
     payment_method_id: int
+    transaction_id: Optional[str] = None
 
 
 class PaymentCreate(PaymentBase):

@@ -793,10 +793,12 @@ async def get_available_properties_and_units(
         properties = property_service.get_properties(
             db, 
           is_occupied=False,
+          owner_id=current_user.id
         )
         units = unit_service.get_all_available_units(
             db, 
         )
+        
         items = []
         for property in properties:
             property_response = PropertyMinimumResponse.model_validate(property)
@@ -810,14 +812,18 @@ async def get_available_properties_and_units(
                     "type": "property"
                 }
             )
-  
-        items.extend(
-            {
-                "item": UnitMinimumResponse.model_validate(units).model_dump(mode="json"),
-                "type": "unit"
-            }
-            for units in units
-        )
+
+        for unit in units:
+            if unit.property.owner_id == current_user.id:
+                unit_response = UnitMinimumResponse.model_validate(unit)
+                    
+                items.append(
+                    {
+                        "item": unit_response.model_dump(mode="json"),
+                        "type": "unit"
+                    }
+                )
+        
         if not items:
             return data_response([])
         return data_response(items)
