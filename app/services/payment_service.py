@@ -106,6 +106,19 @@ class PaymentService:
             .limit(limit)
             .all()
         )
+    
+    def get_payments_for_owner(
+        self, db: Session, owner_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Payment]:
+        return (
+            db.query(Payment)
+            .join(Payment.booking)
+            .join(Booking.property)
+            .filter(Property.owner_id == owner_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def get_payments_for_invoice(
         self, db: Session, invoice_id: int, skip: int = 0, limit: int = 100

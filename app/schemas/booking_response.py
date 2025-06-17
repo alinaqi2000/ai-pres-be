@@ -63,6 +63,8 @@ class PaymentResponse(BaseModel):
     payment_method: Optional[PaymentMethodMinimumResponse] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    tenant: Optional[UserMinimumResponse] = None
+    owner: Optional[UserMinimumResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

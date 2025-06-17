@@ -13,6 +13,7 @@ class UnitMinimumResponse(BaseModel):
     name: str
     unit_type: UnitType
     monthly_rent: float
+    is_occupied: bool
     images: Optional[List[UnitImageResponse]] = []
 
     model_config = ConfigDict(from_attributes=True)

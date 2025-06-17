@@ -125,19 +125,40 @@ class InvoiceService:
         return db_invoice   
 
     def create_invoice_from_booking(self, db: Session, booking: Booking) -> Optional[Invoice]:
-        """Create an invoice automatically when a booking is confirmed"""
+        """Create an invoice automatically when a booking is confirmed. If an invoice exists for the current month,
+        create one for the next available month."""
         try:
-            month_name = booking.start_date.strftime("%B")
-            year = booking.start_date.strftime("%Y")
+            # Start with the current month
+            current_month = booking.start_date.replace(day=1).date()
+            
+            # Find the next available month
+            next_month = current_month
+            while True:
+                # Check if an invoice exists for this month
+                existing_invoice = db.query(Invoice).filter(
+                    Invoice.booking_id == booking.id,
+                    Invoice.month == next_month
+                ).first()
+                
+                if not existing_invoice:
+                    break  # Found an available month
+                
+                # Move to next month
+                next_month = next_month.replace(month=next_month.month % 12 + 1)
+                if next_month.month == 1:  # If we moved to January, increment year
+                    next_month = next_month.replace(year=next_month.year + 1)
+            
+            month_name = next_month.strftime("%B")
+            year = next_month.strftime("%Y")
+
             line_item = InvoiceLineItemCreate(
                 description=f"Monthly rent for {month_name}, {year}",
                 amount=booking.total_price,
                 quantity=1
             )
 
+            # Set due date to 30 days before the start date
             due_date = booking.start_date - timedelta(days=30)
-            # Convert datetime to date for month field
-            invoice_month = booking.start_date.replace(day=1).date()
 
             invoice_data = InvoiceCreate(
                 booking_id=booking.id,
@@ -145,7 +166,7 @@ class InvoiceService:
                 status=InvoiceStatus.OVERDUE,
                 line_items=[line_item],
                 reference_number=generate_invoice_id(),
-                month=invoice_month
+                month=next_month
             )
 
             return self.create(db, invoice_data)

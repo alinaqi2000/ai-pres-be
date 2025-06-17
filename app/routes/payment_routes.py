@@ -1,3 +1,4 @@
+from schemas.auth_schema import UserMinimumResponse
 from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -96,8 +97,11 @@ def get_payment(
         if not (is_tenant or is_owner):
             return forbidden_error("Not authorized to view this payment.")
 
+        res = PaymentResponse.model_validate(payment).model_dump(mode="json")
+        res["owner"] = UserMinimumResponse.model_validate(property_obj.owner).model_dump(mode="json")
+        res["tenant"] = UserMinimumResponse.model_validate(booking.tenant).model_dump(mode="json")
         return data_response(
-            PaymentResponse.model_validate(payment).model_dump(mode="json")
+            res
         )
     except Exception as e:
         traceback.print_exc()
@@ -156,13 +160,12 @@ async def update_payment(
             await email_service.send_update_action_email(
                 current_user.email, "Payment", payment_id
             )
+        res = PaymentResponse.model_validate(updated_payment_result).model_dump(mode="json")
+        res["owner"] = UserMinimumResponse.model_validate(property_of_booking.owner).model_dump(mode="json")
+        res["tenant"] = UserMinimumResponse.model_validate(booking_of_payment.tenant).model_dump(mode="json")
         return data_response(
-            PaymentResponse.model_validate(updated_payment_result).model_dump(
-                mode="json"
-            )
+            res
         )
-    except ValueError as ve:
-        return conflict_error(str(ve))
     except Exception as e:
         traceback.print_exc()
         return internal_server_error(str(e))
@@ -200,10 +203,37 @@ def get_payments_for_booking_route(
         return internal_server_error(str(e))
 
     payments = payment_service.get_payments_for_booking(db, booking_id, skip, limit)
+    
+    payments_list = []
+    for p in payments:
+        res = PaymentResponse.model_validate(p).model_dump(mode="json")
+        res["owner"] = UserMinimumResponse.model_validate(property_obj.owner).model_dump(mode="json")
+        res["tenant"] = UserMinimumResponse.model_validate(p.booking.tenant).model_dump(mode="json")
+        payments_list.append(res)
     return data_response(
-        [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
+        payments_list
     )
 
+@router.get("/owner/me", response_model=List[PaymentResponse])
+def get_payments_for_owner_route(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 100,
+):
+    if not isinstance(current_user, User):
+        return current_user
+
+    payments = payment_service.get_payments_for_owner(db, current_user.id, skip, limit)
+    payments_list = []
+    for p in payments:
+        res = PaymentResponse.model_validate(p).model_dump(mode="json")
+        res["owner"] = UserMinimumResponse.model_validate(current_user).model_dump(mode="json")
+        res["tenant"] = UserMinimumResponse.model_validate(p.booking.tenant).model_dump(mode="json")
+        payments_list.append(res)
+    return data_response(
+        payments_list
+    )
 
 @router.get("/invoice/{invoice_id}", response_model=List[PaymentResponse])
 def get_payments_for_invoice_route(
@@ -244,8 +274,14 @@ def get_payments_for_invoice_route(
         return internal_server_error(str(e))
 
     payments = payment_service.get_payments_for_invoice(db, invoice_id, skip, limit)
+    payments_list = []
+    for p in payments:
+        res = PaymentResponse.model_validate(p).model_dump(mode="json")
+        res["owner"] = UserMinimumResponse.model_validate(property_obj.owner).model_dump(mode="json")
+        res["tenant"] = UserMinimumResponse.model_validate(p.booking.tenant).model_dump(mode="json")
+        payments_list.append(res)
     return data_response(
-        [PaymentResponse.model_validate(p).model_dump(mode="json") for p in payments]
+        payments_list
     )
 
 

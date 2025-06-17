@@ -166,6 +166,8 @@ async def search_properties(
         )
         create_search_history(db, search_data)
         query = db.query(property_service.model)
+        query = query.filter(property_service.model.is_occupied == False)
+        query = query.filter(property_service.model.is_published == True)
         if name:
             query = query.filter(property_service.model.name.ilike(f"%{name}%"))
         if city:
@@ -232,16 +234,18 @@ async def search_properties_and_units(
         )
         create_search_history(db, search_data)
         query = db.query(property_service.model)
+        query = query.filter(property_service.model.is_occupied == False)
+        query = query.filter(property_service.model.is_published == True)
         if name:
             query = query.filter(property_service.model.name.ilike(f"%{name}%"))
         if city:
             query = query.filter(property_service.model.city.ilike(f"%{city}%"))
         properties = query.offset(skip).limit(limit).all()
         results = []
+        units = []
         for property in properties:
             floors = []
             for floor in property.floors:
-                units = []
                 for unit in floor.units:
                     match = True
                     if (
@@ -269,44 +273,46 @@ async def search_properties_and_units(
                         "units": units,
                     }
                     floors.append(floor_data)
-            if floors:
-                prop_data = {
-                    "id": property.id,
-                    "property_id": f"PROP-{property.id:04d}",
-                    "name": property.name,
-                    "city": property.city,
-                    "address": property.address,
-                    "property_type": str(property.property_type),
-                    "monthly_rent": property.monthly_rent,
-                    "is_published": property.is_published,
-                    "is_occupied": property.is_occupied,
-                    "created_at": property.created_at,
-                    "updated_at": property.updated_at,
-                    "thumbnail": None,
-                    "images": [],
-                    "meta": {
-                        "total_floors": 0,
-                        "total_units": 0,
-                        "total_unoccupied_units": 0,
-                    },
-                    "floors": floors,
-                    "owner": UserMinimumResponse.model_validate(property.owner),
-                }
-                if property.images:
-                    for image in property.images:
-                        if image.is_thumbnail:
-                            prop_data["thumbnail"] = (
-                                PropertyImageResponse.model_validate(image).model_dump(
-                                    mode="json"
-                                )
+
+            prop_data = {
+                "id": property.id,
+                "property_id": f"PROP-{property.id:04d}",
+                "name": property.name,
+                "city": property.city,
+                "address": property.address,
+                "property_type": str(property.property_type),
+                "description": property.description,
+                "total_area": property.total_area,
+                "monthly_rent": property.monthly_rent,
+                "is_published": property.is_published,
+                "is_occupied": property.is_occupied,
+                "created_at": property.created_at,
+                "updated_at": property.updated_at,
+                "thumbnail": None,
+                "images": [],
+                "meta": {
+                    "total_floors": len(floors),
+                    "total_units": len(units),
+                    "total_unoccupied_units": len([unit for unit in units if not unit['is_occupied']]),
+                },
+                "floors": floors,
+                "owner": UserMinimumResponse.model_validate(property.owner),
+            }
+            if property.images:
+                for image in property.images:
+                    if image.is_thumbnail:
+                        prop_data["thumbnail"] = (
+                            PropertyImageResponse.model_validate(image).model_dump(
+                                mode="json"
                             )
-                        else:
-                            prop_data["images"].append(
-                                PropertyImageResponse.model_validate(image).model_dump(
-                                    mode="json"
-                                )
+                        )
+                    else:
+                        prop_data["images"].append(
+                            PropertyImageResponse.model_validate(image).model_dump(
+                                mode="json"
                             )
-                results.append(prop_data)
+                        )
+            results.append(prop_data)
         if results:
             return data_response(results)
         return data_response([])
