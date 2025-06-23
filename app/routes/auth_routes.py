@@ -211,7 +211,7 @@ async def update_user_route(
 
 @router.post("/reset-password", response_model=ResponseModel)
 async def reset_password(
-    email: str, db: Session = Depends(get_db), current_user=Depends(owner_required)
+    email: str, db: Session = Depends(get_db)
 ):
     """Route for owners to reset a tenant's password"""
     try:

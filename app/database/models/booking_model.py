@@ -30,6 +30,6 @@ class Booking(Base):
     property = relationship("Property")
     floor = relationship("Floor")
     unit = relationship("Unit")
-    tenant_request = relationship("TenantRequest")
+    tenant_request = relationship("TenantRequest", foreign_keys=[tenant_request_id])
     payments = relationship("Payment", back_populates="booking")
     invoices = relationship("Invoice", back_populates="booking")

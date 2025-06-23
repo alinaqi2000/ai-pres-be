@@ -58,6 +58,7 @@ class BookingMinimumResponse(BaseModel):
     booked_by_owner: bool
     start_date: datetime
     end_date: Optional[datetime] = None
+    total_price: float
     property: Optional[PropertyMinimumResponse] = None
     floor: Optional[FloorMinimumResponse] = None
     unit: Optional[UnitMinimumResponse] = None

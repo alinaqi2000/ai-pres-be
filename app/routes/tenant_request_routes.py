@@ -1,3 +1,8 @@
+from schemas.booking_schema import BookingUpdate
+from database.models.tenant_request_model import TenantRequest
+from enums.booking_status import BookingStatus
+from enums.tenant_request_status import TenantRequestStatus
+from enums.tenant_request_type import TenantRequestType
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, selectinload
 from typing import List
@@ -44,89 +49,102 @@ async def create_request(
         return current_user
 
     try:
-        if booking_service.is_property_occupied(db, request.property_id, request.start_date):
-            return conflict_error(
-                "This property is currently booked and not available for tenant requests."
-            )
-
-        start_date = request.start_date.replace(tzinfo=timezone.utc)
-        
-
-        if request.end_date is not None:
-            end_date = request.end_date.replace(tzinfo=timezone.utc)
-            
-            min_end_date = start_date + relativedelta(months=1, days=-1)
-            
-            if end_date < min_end_date:
+        request_id = None
+        if request.type == TenantRequestType.BOOKING.value:
+            if booking_service.is_property_occupied(db, request.property_id, request.start_date):
                 return conflict_error(
-                    "Booking duration must be at least one full calendar month. "
-                    f"Minimum end date would be {min_end_date.date()}"
+                    "This property is currently booked and not available for tenant requests."
                 )
+
+            start_date = request.start_date.replace(tzinfo=timezone.utc)
+        
+            if request.end_date is not None:
+                end_date = request.end_date.replace(tzinfo=timezone.utc)
+                
+                min_end_date = start_date + relativedelta(months=1, days=-1)
+                
+                if end_date < min_end_date:
+                    return conflict_error(
+                        "Booking duration must be at least one full calendar month. "
+                        f"Minimum end date would be {min_end_date.date()}"
+                    )
                 
 
-        existing = tenant_request_service.check_existing_request(
-            db, current_user.id, request
-        )
-        if existing:
-            return conflict_error(
-                "Tenant has already made a request for this property."
+            existing = tenant_request_service.check_existing_request(
+                db, current_user.id, request
+            )
+            if existing:
+                return conflict_error(
+                    "Tenant has already made a request for this property."
+                )
+
+            if not request.unit_id:
+                return conflict_error("unit_id is required to make a tenant request.")
+
+            unit_obj = (
+                db.query(Unit)
+                .options(selectinload(Unit.floor).selectinload(Floor.property))
+                .filter(Unit.id == request.unit_id)
+                .first()
             )
 
-        if not request.unit_id:
-            return conflict_error("unit_id is required to make a tenant request.")
+            if not unit_obj:
+                return not_found_error(f"Unit with ID {request.unit_id} not found.")
 
-        unit_obj = (
-            db.query(Unit)
-            .options(selectinload(Unit.floor).selectinload(Floor.property))
-            .filter(Unit.id == request.unit_id)
-            .first()
-        )
+            if unit_obj.is_occupied:
+                return conflict_error(
+                    f"Unit with ID {request.unit_id} is currently occupied and not available for requests."
+                )
 
-        if not unit_obj:
-            return not_found_error(f"Unit with ID {request.unit_id} not found.")
+            floor_obj = unit_obj.floor
+            property_obj = floor_obj.property
+            request_id = property_obj.id
+            if not floor_obj:
+                return internal_server_error(
+                    f"Critical: Floor not found for unit {unit_obj.id}. Data inconsistency."
+                )
+            if not property_obj:
+                return internal_server_error(
+                    f"Critical: Property not found for floor {floor_obj.id}. Data inconsistency."
+                )
 
-        if unit_obj.is_occupied:
-            return conflict_error(
-                f"Unit with ID {request.unit_id} is currently occupied and not available for requests."
+            if property_obj.owner_id == current_user.id:
+                return forbidden_error(
+                    "Property owners cannot make tenant requests for their own properties."
+                )
+
+            actual_request_payload = TenantRequestCreate(
+                unit_id=unit_obj.id,
+                floor_id=floor_obj.id,
+                property_id=property_obj.id,
+                tenant_id=current_user.id,
+                owner_id=property_obj.owner_id,
+                message=request.message,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                monthly_offer=request.monthly_offer,
+                preferred_move_in=request.preferred_move_in,
             )
-
-        floor_obj = unit_obj.floor
-        property_obj = floor_obj.property
-
-        if not floor_obj:
-            return internal_server_error(
-                f"Critical: Floor not found for unit {unit_obj.id}. Data inconsistency."
+        else:
+            booking = booking_service.get(db, request.booking_id)
+            if not booking:
+                return not_found_error(f"Booking with ID {request.booking_id} not found.")
+            request_id = booking.id
+            actual_request_payload = TenantRequestCreate(
+                booking_id=booking.id,
+                tenant_id=current_user.id,
+                owner_id=booking.property.owner_id,
+                message=request.message,
+                type=request.type,
             )
-        if not property_obj:
-            return internal_server_error(
-                f"Critical: Property not found for floor {floor_obj.id}. Data inconsistency."
+        if actual_request_payload.type == TenantRequestType.BOOKING.value:
+            existing_request = tenant_request_service.check_existing_request(
+                db, current_user.id, actual_request_payload
             )
-
-        if property_obj.owner_id == current_user.id:
-            return forbidden_error(
-                "Property owners cannot make tenant requests for their own properties."
-            )
-
-        actual_request_payload = TenantRequestCreate(
-            unit_id=unit_obj.id,
-            floor_id=floor_obj.id,
-            property_id=property_obj.id,
-            tenant_id=current_user.id,
-            owner_id=property_obj.owner_id,
-            message=request.message,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            monthly_offer=request.monthly_offer,
-            preferred_move_in=request.preferred_move_in,
-        )
-
-        existing_request = tenant_request_service.check_existing_request(
-            db, current_user.id, actual_request_payload
-        )
-        if existing_request:
-            return conflict_error(
-                "You have already made a request for this unit, or another pending/accepted request for you exists for this unit."
-            )
+            if existing_request:
+                return conflict_error(
+                    "You have already made a request for this unit, or another pending/accepted request for you exists for this unit."
+                )
 
         created_tenant_request = tenant_request_service.create(
             db,
@@ -134,7 +152,7 @@ async def create_request(
         )
 
         await email_service.send_create_action_email(
-            current_user.email, "Tenant Request", unit_obj.id
+            current_user.email, "Tenant Request", request_id
         )
 
         response = TenantRequestResponse.model_validate(created_tenant_request)
@@ -148,8 +166,8 @@ async def create_request(
         return internal_server_error(f"An unexpected error occurred: {str(e)}")
 
 
-@router.get("/all_requests", response_model=List[TenantRequestResponse])
-async def list_all_requests(
+@router.get("/cancellation", response_model=List[TenantRequestResponse])
+async def list_all_cancellation_requests(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -159,7 +177,89 @@ async def list_all_requests(
         return current_user
 
     try:
-        requests = tenant_request_service.get_all(db, skip, limit)
+        requests = tenant_request_service.get_all_cancellation_requests(db, current_user.id, skip, limit)
+        responses = []
+        for r in requests:
+            response = TenantRequestResponse.model_validate(r)
+            if response.property and not response.property.property_id:
+                response.property.property_id = generate_property_id(response.property.id)
+            if response.unit:
+                response.unit.unit_id = generate_unit_id(response.unit.id)
+            responses.append(response.model_dump(mode="json"))
+        return data_response(responses)
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+@router.patch("/update-request/{request_id}", response_model=TenantRequestResponse)
+async def update_request_response(
+    request_id: int,
+    request_in: TenantRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Updates tenant request status. Owners can update any status, tenants can only cancel their own bookings."""
+    if not isinstance(current_user, User):
+        return current_user
+    try:
+        request_to_check = tenant_request_service.get(db, request_id)
+        if not request_to_check:
+            return not_found_error(f"Tenant request with ID {request_id} not found.")
+
+        if request_to_check.owner_id != current_user.id:
+            return forbidden_error("Not authorized to update this request.")
+
+
+        property = db.query(Property).filter(Property.id == request_to_check.property_id).first()
+        is_owner = property and property.owner_id == current_user.id
+
+        try:
+            status = TenantRequestStatus(request_in.status)
+        except ValueError:
+            return bad_request_error(f"Invalid status: {request_in.status}")
+
+        updated_request = tenant_request_service.update(
+            db=db,
+            request_id=request_id,
+            request_in=request_in, 
+            new_status=status,
+            is_owner=is_owner,
+            current_user=current_user,
+        )
+        if isinstance(updated_request, str):
+            return internal_server_error(updated_request)
+
+        if status == TenantRequestStatus.ACCEPTED:
+            await booking_service.update(
+                db=db,
+                booking_id=request_to_check.booking_id,
+                booking_in=BookingUpdate(
+                    status=BookingStatus.CLOSED,
+                    end_date=datetime.now(timezone.utc),
+                ),
+                is_owner=is_owner,
+            )
+
+        response = tenant_request_service.format_tenant_request_response(updated_request, db)
+        return data_response(response)
+
+    except Exception as e:
+        traceback.print_exc()
+        return internal_server_error(str(e))
+
+
+@router.get("/booking", response_model=List[TenantRequestResponse])
+async def list_all_booking_requests(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not isinstance(current_user, User):
+        return current_user
+
+    try:
+        requests = tenant_request_service.get_all_booking_requests(db, current_user.id, skip, limit)
         responses = []
         for r in requests:
             response = TenantRequestResponse.model_validate(r)

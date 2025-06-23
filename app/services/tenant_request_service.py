@@ -1,7 +1,9 @@
 from typing import List, Optional
+from responses.error import internal_server_error
+from enums.tenant_request_type import TenantRequestType
 from sqlalchemy.orm import Session, joinedload
 from database.models import TenantRequest
-from schemas.tenant_request_schema import TenantRequestCreate
+from schemas.tenant_request_schema import TenantRequestCreate, TenantRequestUpdate
 from services.booking_service import BookingService
 from services.email_service import EmailService
 from schemas.booking_schema import BookingCreate
@@ -10,6 +12,7 @@ from utils.id_generator import generate_property_id, generate_unit_id
 from datetime import datetime, timezone
 from database.models.booking_model import Booking
 from enums.tenant_request_status import TenantRequestStatus
+from database.models.user_model import User
 
 class TenantRequestService:
     def __init__(self):
@@ -24,6 +27,24 @@ class TenantRequestService:
         db.refresh(db_obj)
 
         return db_obj
+
+    def update(self, db: Session, request_id: int, request_in: TenantRequestUpdate, new_status: TenantRequestStatus, is_owner: bool, current_user: User) -> Optional[TenantRequest]:
+        try:
+            request_to_check = self.get(db, request_id)
+            if not request_to_check:
+                return not_found_error(f"Tenant request with ID {request_id} not found.")
+
+            if request_to_check.owner_id != current_user.id:
+                return forbidden_error("Not authorized to update this request.")
+
+            request_to_check.status = new_status.value
+            request_to_check.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(request_to_check)
+
+            return request_to_check
+        except Exception as e:
+            return str(e)
 
     def get(self, db: Session, request_id: int) -> Optional[TenantRequest]:
         return (
@@ -49,6 +70,42 @@ class TenantRequestService:
                 joinedload(TenantRequest.floor),
                 joinedload(TenantRequest.unit),
             )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    
+    def get_all_cancellation_requests(
+        self, db: Session, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> List[TenantRequest]:
+        return (
+            db.query(TenantRequest)
+            .options(
+                joinedload(TenantRequest.tenant),
+                joinedload(TenantRequest.property),
+                joinedload(TenantRequest.floor),
+                joinedload(TenantRequest.unit),
+            )
+            .filter(TenantRequest.type == TenantRequestType.CANCELLATION.value)
+            .filter((TenantRequest.tenant_id == tenant_id) | (TenantRequest.owner_id == tenant_id))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def get_all_booking_requests(
+        self, db: Session, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> List[TenantRequest]:
+        return (
+            db.query(TenantRequest)
+            .options(
+                joinedload(TenantRequest.tenant),
+                joinedload(TenantRequest.property),
+                joinedload(TenantRequest.floor),
+                joinedload(TenantRequest.unit),
+            )
+            .filter(TenantRequest.type == TenantRequestType.BOOKING.value)
+            .filter((TenantRequest.tenant_id == tenant_id) | (TenantRequest.owner_id == tenant_id))
             .offset(skip)
             .limit(limit)
             .all()
