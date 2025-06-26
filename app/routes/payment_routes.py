@@ -1,3 +1,5 @@
+from enums.payment_status import PaymentStatus
+from enums.invoice_status import InvoiceStatus
 from schemas.auth_schema import UserMinimumResponse
 from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import JSONResponse
@@ -149,6 +151,15 @@ async def update_payment(
             db, payment_id, payment_update
         )
 
+        invoice = db.query(Invoice).filter(Invoice.id == updated_payment_result.invoice_id).first()
+        if not invoice:
+            return internal_server_error("Invoice associated with payment not found.")
+
+        if updated_payment_result.status == PaymentStatus.COMPLETED:
+            invoice.status = InvoiceStatus.PAID
+            db.commit()
+            db.refresh(invoice)
+        
         if isinstance(updated_payment_result, JSONResponse):
             return updated_payment_result
 

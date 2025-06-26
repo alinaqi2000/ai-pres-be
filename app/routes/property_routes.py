@@ -88,10 +88,10 @@ async def get_property_recommendations(
         property_data = {
             "id": 1,
             "name": "Updated Luxury Apartment",
-            "city": "sargodha",
+            "city": "sialkot",
             "property_type": "BUILDING",
             "description": "Updated description for the luxury apartment",
-            "monthly_rent": 600,
+            "monthly_rent": 200001,
             "is_published": False,
         }
 

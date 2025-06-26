@@ -17,30 +17,6 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
 
-    # def get_summary_report(self):
-    #     """
-    #     Generate a summary report containing booking, payment, and invoice statistics.
-    #     This is for admin users only.
-    #     """
-    #     # Get current time in UTC for the report generation timestamp
-    #     report_time = datetime.now(timezone.utc)
-
-    #     # Get booking statistics
-    #     booking_stats = self._get_booking_stats()
-
-    #     # Get payment statistics
-    #     payment_stats = self._get_payment_stats()
-
-    #     # Get invoice statistics
-    #     invoice_stats = self._get_invoice_stats()
-
-    #     return {
-    #         "booking_stats": booking_stats,
-    #         "payment_stats": payment_stats,
-    #         "invoice_stats": invoice_stats,
-    #         "generated_at": report_time,
-    #     }
-
     def get_owner_report(self, owner_id: int) -> Dict[str, Any]:
         """
         Generate a report for a property owner.
@@ -67,14 +43,17 @@ class ReportService:
                 "property_count": 0,
             }
 
+        bookings = self.db.query(Booking).filter(Booking.property_id.in_(property_ids)).all()
+        booking_ids = [b.id for b in bookings]
+
         # Get booking statistics for owner's properties
-        booking_stats = self._get_booking_stats(property_ids=property_ids)
+        booking_stats = self._get_booking_stats(property_ids=property_ids, booking_ids=booking_ids)
 
         # Get payment statistics for owner's properties
-        payment_stats = self._get_payment_stats(property_ids=property_ids)
+        payment_stats = self._get_payment_stats(property_ids=property_ids, booking_ids=booking_ids)
 
         # Get invoice statistics for owner's properties
-        invoice_stats = self._get_invoice_stats(property_ids=property_ids)
+        invoice_stats = self._get_invoice_stats(property_ids=property_ids, booking_ids=booking_ids)
 
         return {
             "booking_stats": booking_stats,
@@ -122,15 +101,12 @@ class ReportService:
         total_given = float(total_given_result[0]) if total_given_result[0] is not None else 0.0
 
         # Calculate total_upcoming: sum of unpaid invoice amounts for tenant's bookings
-        unpaid_invoice_result = (
-            self.db.query(func.sum(Invoice.amount))
-            .filter(
-                Invoice.booking_id.in_(booking_ids),
-                Invoice.status.in_([InvoiceStatus.PENDING, InvoiceStatus.OVERDUE])
-            )
-            .first()
-        )
-        total_upcoming = float(unpaid_invoice_result[0]) if unpaid_invoice_result[0] is not None else 0.0
+        upcoming_query = self.db.query(Booking).filter(
+            Booking.id.in_(booking_ids),
+            Booking.status.in_([BookingStatus.ACTIVE])
+        ).all()
+
+        total_upcoming = sum([b.total_price for b in upcoming_query])
 
         payment_stats = {"total_given": round(total_given, 2), "total_upcoming": round(total_upcoming, 2)}
 
@@ -176,7 +152,7 @@ class ReportService:
         active_bookings = query.filter(Booking.status == BookingStatus.ACTIVE).count()
 
         # Get closed bookings (status = 'closed')
-        closed_bookings = query.filter(Booking.status == BookingStatus.CONFIRMED).count()
+        closed_bookings = query.filter(Booking.status == BookingStatus.CLOSED).count()
 
         return {
             "total": total_bookings,
@@ -231,13 +207,12 @@ class ReportService:
             else 0.0
         )
 
-        # Get total upcoming amount (sum of all pending payments)
-        total_upcoming_result = pending_query.first()
-        total_upcoming = (
-            float(total_upcoming_result[0])
-            if total_upcoming_result[0] is not None
-            else 0.0
-        )
+        upcoming_query = self.db.query(Booking).filter(
+            Booking.id.in_(booking_ids),
+            Booking.status.in_([BookingStatus.ACTIVE])
+        ).all()
+
+        total_upcoming = sum([b.total_price for b in upcoming_query])
 
         return {
             "total_received": round(total_received, 2),
