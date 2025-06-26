@@ -18,6 +18,7 @@ from routes import (
     invoice_routes,
     payment_routes,
     payment_method_routes,
+    report_routes,
 )
 
 import logging
@@ -69,6 +70,7 @@ app.include_router(booking_routes.router)
 app.include_router(invoice_routes.router)
 app.include_router(payment_routes.router)
 app.include_router(payment_method_routes.router)
+app.include_router(report_routes.router)
 
 @app.get("/")
 def read_root():
