@@ -78,34 +78,48 @@ async def create_request(
                     "Tenant has already made a request for this property."
                 )
 
-            if not request.unit_id:
-                return conflict_error("unit_id is required to make a tenant request.")
+            # if not request.unit_id:
+            #     return conflict_error("unit_id is required to make a tenant request.")
+            unit_obj = None
+            if request.unit_id:
+                unit_obj = (
+                    db.query(Unit)
+                    .options(selectinload(Unit.floor).selectinload(Floor.property))
+                    .filter(Unit.id == request.unit_id)
+                    .first()
+                )
 
-            unit_obj = (
-                db.query(Unit)
-                .options(selectinload(Unit.floor).selectinload(Floor.property))
-                .filter(Unit.id == request.unit_id)
+                if not unit_obj:
+                    return not_found_error(f"Unit with ID {request.unit_id} not found.")
+
+                if unit_obj.is_occupied:
+                    return conflict_error(
+                        f"Unit with ID {request.unit_id} is currently occupied and not available for requests."
+                    )
+
+            floor_obj = None
+            if request.floor_id:
+                floor_obj = (
+                    db.query(Floor)
+                    .options(selectinload(Floor.property))
+                    .filter(Floor.id == request.floor_id)
+                    .first()
+                )
+
+                if not floor_obj:
+                    return internal_server_error(
+                        f"Critical: Floor not found. Data inconsistency."
+                    )
+
+            property_obj = (
+                db.query(Property)
+                .filter(Property.id == request.property_id)
                 .first()
             )
-
-            if not unit_obj:
-                return not_found_error(f"Unit with ID {request.unit_id} not found.")
-
-            if unit_obj.is_occupied:
-                return conflict_error(
-                    f"Unit with ID {request.unit_id} is currently occupied and not available for requests."
-                )
-
-            floor_obj = unit_obj.floor
-            property_obj = floor_obj.property
             request_id = property_obj.id
-            if not floor_obj:
-                return internal_server_error(
-                    f"Critical: Floor not found for unit {unit_obj.id}. Data inconsistency."
-                )
             if not property_obj:
                 return internal_server_error(
-                    f"Critical: Property not found for floor {floor_obj.id}. Data inconsistency."
+                    f"Critical: Property not found. Data inconsistency."
                 )
 
             if property_obj.owner_id == current_user.id:
@@ -114,8 +128,8 @@ async def create_request(
                 )
 
             actual_request_payload = TenantRequestCreate(
-                unit_id=unit_obj.id,
-                floor_id=floor_obj.id,
+                unit_id=unit_obj.id if unit_obj else None,
+                floor_id=floor_obj.id if floor_obj else None,
                 property_id=property_obj.id,
                 tenant_id=current_user.id,
                 owner_id=property_obj.owner_id,
@@ -229,7 +243,7 @@ async def update_request_response(
         if isinstance(updated_request, str):
             return internal_server_error(updated_request)
 
-        if status == TenantRequestStatus.ACCEPTED:
+        if status == TenantRequestStatus.ACCEPTED and updated_request.type == TenantRequestType.CANCELLATION.value:
             await booking_service.update(
                 db=db,
                 booking_id=request_to_check.booking_id,
@@ -240,6 +254,16 @@ async def update_request_response(
                 is_owner=is_owner,
             )
 
+        if status == TenantRequestStatus.ACCEPTED and updated_request.type == TenantRequestType.BOOKING.value:
+            updated = await tenant_request_service.update_status(
+                db=db,
+                request_id=request_id,
+                new_status=status,
+                user_id=current_user.id
+            )
+            if isinstance(updated, str):
+                return internal_server_error(updated)
+        
         response = tenant_request_service.format_tenant_request_response(updated_request, db)
         return data_response(response)
 

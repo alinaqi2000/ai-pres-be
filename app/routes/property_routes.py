@@ -242,10 +242,12 @@ async def search_properties_and_units(
             query = query.filter(property_service.model.city.ilike(f"%{city}%"))
         properties = query.offset(skip).limit(limit).all()
         results = []
-        units = []
+        total_units = 0
+        total_unoccupied_units = 0
         for property in properties:
             floors = []
             for floor in property.floors:
+                units = []
                 for unit in floor.units:
                     match = True
                     if (
@@ -265,14 +267,16 @@ async def search_properties_and_units(
                         # Add unit_id to response
                         unit_data["unit_id"] = generate_unit_id(unit.id)
                         units.append(unit_data)
-                if units:
-                    floor_data = {
-                        "id": floor.id,
-                        "number": floor.number,
-                        "name": floor.name,
-                        "units": units,
-                    }
-                    floors.append(floor_data)
+                        total_units += 1
+                        if not unit.is_occupied:
+                            total_unoccupied_units += 1
+                floor_data = {
+                    "id": floor.id,
+                    "number": floor.number,
+                    "name": floor.name,
+                    "units": units,
+                }
+                floors.append(floor_data)
 
             prop_data = {
                 "id": property.id,
@@ -292,8 +296,8 @@ async def search_properties_and_units(
                 "images": [],
                 "meta": {
                     "total_floors": len(floors),
-                    "total_units": len(units),
-                    "total_unoccupied_units": len([unit for unit in units if not unit['is_occupied']]),
+                    "total_units": total_units,
+                    "total_unoccupied_units": total_unoccupied_units,
                 },
                 "floors": floors,
                 "owner": UserMinimumResponse.model_validate(property.owner),
